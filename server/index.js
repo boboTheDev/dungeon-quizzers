@@ -1,4 +1,5 @@
 const express = require('express');
+const compression = require('compression');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
@@ -14,9 +15,24 @@ const io = new Server(server, {
   }
 });
 
-// Middleware
+// Gzip compression
+app.use(compression());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Static files with caching
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  maxAge: '1h',
+  etag: true,
+  lastModified: true
+}));
+
+// Cache sprites aggressively (they don't change)
+app.use('/display/sprites', express.static(path.join(__dirname, '..', 'public', 'display', 'sprites'), {
+  maxAge: '7d'
+}));
+app.use('/player/sprites', express.static(path.join(__dirname, '..', 'public', 'player', 'sprites'), {
+  maxAge: '7d'
+}));
 
 // Routes
 app.use('/api', apiRoutes);
