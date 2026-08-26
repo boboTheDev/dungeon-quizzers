@@ -1,0 +1,25 @@
+{
+  "name": "dungeon-quizzers",
+  "version": "1.0.0",
+  "description": "Dungeon Quizzers - 2.5D multiplayer quiz battle game",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "keywords": [
+    "game",
+    "quiz",
+    "multiplayer",
+    "three.js"
+  ],
+  "author": "AJP",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "gray-matter": "^4.0.3",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3"
+  }
+}

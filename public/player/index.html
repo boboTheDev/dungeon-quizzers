@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Dungeon Quizzers - Join Game</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1A1A2E; color: #ECF0F1;
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .container { max-width: 400px; width: 100%; }
+    .logo { text-align: center; margin-bottom: 30px; }
+    .logo h1 { font-size: 2rem; color: #F1C40F; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+    .logo p { color: #95A5A6; margin-top: 5px; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .input-group { margin-bottom: 20px; }
+    .input-group label { display: block; margin-bottom: 8px; color: #95A5A6; font-size: 0.9rem; }
+    .input-group input {
+      width: 100%; padding: 15px; border: 2px solid #0F3460; border-radius: 10px;
+      background: #16213E; color: #ECF0F1; font-size: 1.1rem;
+      text-transform: uppercase; letter-spacing: 3px; text-align: center;
+    }
+    .input-group input:focus { outline: none; border-color: #4A90D9; }
+    .btn {
+      width: 100%; padding: 15px; border: none; border-radius: 10px;
+      font-size: 1.1rem; font-weight: bold; cursor: pointer;
+      transition: transform 0.1s, opacity 0.1s;
+    }
+    .btn:active { transform: scale(0.98); opacity: 0.9; }
+    .btn-primary { background: #4A90D9; color: white; }
+    .btn-success { background: #2ECC71; color: white; }
+    .btn:disabled { background: #7F8C8D; cursor: not-allowed; }
+    .avatar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }
+    .avatar-card {
+      background: #16213E; border: 3px solid #0F3460; border-radius: 15px;
+      padding: 15px; text-align: center; cursor: pointer;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .avatar-card:hover { border-color: #4A90D9; transform: scale(1.05); }
+    .avatar-card.selected { border-color: #F1C40F; background: #1A2744; }
+    .avatar-icon {
+      margin-bottom: 10px; display: flex; justify-content: center; align-items: center;
+    }
+    .avatar-icon canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+    .avatar-name { font-weight: bold; }
+    .avatar-class { font-size: 0.8rem; color: #95A5A6; }
+    .waiting { text-align: center; padding: 40px 20px; }
+    .waiting h2 { color: #F1C40F; margin-bottom: 20px; }
+    .spinner {
+      width: 50px; height: 50px; border: 4px solid #0F3460; border-top-color: #F1C40F;
+      border-radius: 50%; animation: spin 1s linear infinite; margin: 20px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error { background: #E74C3C; color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; text-align: center; }
+
+    /* ===== GAME SCREEN ===== */
+    .turn-indicator {
+      text-align: center; padding: 12px; border-radius: 12px; margin-bottom: 15px;
+      font-size: 1.1rem; font-weight: bold; animation: pulse 1s infinite;
+    }
+    .turn-indicator.player { background: linear-gradient(135deg, #27AE60, #2ECC71); }
+    .turn-indicator.monster { background: linear-gradient(135deg, #C0392B, #E74C3C); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+
+    .game-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .player-info { display: flex; align-items: center; gap: 10px; }
+    .player-avatar { display: flex; align-items: center; justify-content: center; }
+    .player-avatar canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+    .player-stats { font-size: 0.85rem; }
+    .hp-bar { width: 100px; height: 10px; background: #34495E; border-radius: 5px; overflow: hidden; margin-top: 5px; }
+    .hp-fill { height: 100%; background: #2ECC71; transition: width 0.3s; }
+    .hp-fill.low { background: #E74C3C; }
+    .hp-fill.mid { background: #F39C12; }
+
+    .stats-bar {
+      display: flex; justify-content: space-around; padding: 10px;
+      background: #16213E; border-radius: 10px; margin-bottom: 15px;
+    }
+    .stat-item { text-align: center; }
+    .stat-label { font-size: 0.7rem; color: #95A5A6; text-transform: uppercase; }
+    .stat-value { font-size: 1.1rem; font-weight: bold; }
+    .stat-value.dodge { color: #3498DB; }
+    .stat-value.crit { color: #E74C3C; }
+
+    .question-card { background: #16213E; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
+    .question-text { font-size: 1.1rem; line-height: 1.4; margin-bottom: 10px; }
+    .question-meta { font-size: 0.75rem; color: #95A5A6; }
+    .question-meta.attack { color: #E74C3C; }
+    .question-meta.defense { color: #3498DB; }
+
+    .timer { text-align: center; margin: 10px 0; }
+    .timer-circle {
+      width: 50px; height: 50px; border-radius: 50%; border: 4px solid #4A90D9;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; font-weight: bold;
+    }
+    .timer-circle.warning { border-color: #E74C3C; color: #E74C3C; }
+
+    .options { display: flex; flex-direction: column; gap: 10px; }
+    .option-btn {
+      background: #16213E; border: 2px solid #0F3460; border-radius: 10px;
+      padding: 15px; color: #ECF0F1; font-size: 1rem; cursor: pointer; transition: all 0.2s;
+    }
+    .option-btn:hover { border-color: #4A90D9; background: #1A2744; }
+    .option-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .option-btn.correct { background: #2ECC71; border-color: #2ECC71; }
+    .option-btn.wrong { background: #E74C3C; border-color: #E74C3C; }
+
+    .result { text-align: center; padding: 40px 20px; }
+    .result h2 { font-size: 2rem; margin-bottom: 20px; }
+    .result .score { font-size: 3rem; color: #F1C40F; font-weight: bold; }
+    .result .rank { font-size: 1.2rem; color: #95A5A6; margin-top: 10px; }
+    .leaderboard { margin-top: 30px; text-align: left; }
+    .leaderboard h3 { text-align: center; margin-bottom: 15px; color: #F1C40F; }
+    .leaderboard-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 15px; background: #16213E; border-radius: 10px; margin-bottom: 8px;
+    }
+    .leaderboard-item:first-child { background: #1A2744; border: 2px solid #F1C40F; }
+    .leaderboard-rank { font-weight: bold; color: #F1C40F; width: 30px; }
+    .leaderboard-name { flex: 1; }
+    .leaderboard-score { font-weight: bold; }
+
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+      20% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+    }
+
+    .damage-popup {
+      position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 2rem; font-weight: bold; z-index: 1000; pointer-events: none;
+      animation: popupFloat 1.5s ease-out forwards;
+    }
+    .damage-popup.crit { color: #F1C40F; font-size: 2.5rem; }
+    .damage-popup.normal { color: #E74C3C; }
+    .damage-popup.dodge { color: #3498DB; }
+    .damage-popup.heal { color: #2ECC71; }
+    @keyframes popupFloat {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+      20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+      100% { opacity: 0; transform: translate(-50%, -100%) scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>🏰 Dungeon Quizzers</h1>
+      <p>Quiz Battle Game</p>
+    </div>
+
+    <!-- Join Screen -->
+    <div id="join-screen" class="screen active">
+      <div class="input-group">
+        <label>Room Code</label>
+        <input type="text" id="room-code" placeholder="ABC123" maxlength="6">
+      </div>
+      <div class="input-group">
+        <label>Your Name</label>
+        <input type="text" id="player-name" placeholder="Enter your name" maxlength="15">
+      </div>
+      <div id="join-error" class="error" style="display: none;"></div>
+      <button id="join-btn" class="btn btn-primary">Join Game</button>
+    </div>
+
+    <!-- Avatar Selection Screen -->
+    <div id="avatar-screen" class="screen">
+      <h2 style="text-align: center; margin-bottom: 20px;">Choose Your Character</h2>
+      <div class="avatar-grid" id="avatar-grid"></div>
+      <button id="confirm-avatar-btn" class="btn btn-success" disabled>Confirm</button>
+    </div>
+
+    <!-- Waiting Screen -->
+    <div id="waiting-screen" class="screen">
+      <div class="waiting">
+        <h2>Waiting for other players...</h2>
+        <div class="spinner"></div>
+        <div class="players" id="waiting-players"></div>
+        <p style="color: #95A5A6; margin-top: 20px;">Game will start when host begins</p>
+      </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="screen">
+      <!-- Turn Indicator -->
+      <div class="turn-indicator player" id="turn-indicator">⚔️ PLAYER TURN - Attack!</div>
+
+      <div class="game-header">
+        <div class="player-info">
+          <span class="player-avatar" id="my-avatar"><canvas id="my-avatar-canvas" width="48" height="48"></canvas></span>
+          <div>
+            <div id="my-name">Player</div>
+            <div class="player-stats">
+              Score: <span id="my-score">0</span>
+            </div>
+            <div class="hp-bar">
+              <div class="hp-fill" id="my-hp" style="width: 100%"></div>
+            </div>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 0.75rem; color: #95A5A6;">Round</div>
+          <div id="round-display" style="font-size: 1.2rem; font-weight: bold;">1</div>
+        </div>
+      </div>
+
+      <!-- Stats Bar -->
+      <div class="stats-bar">
+        <div class="stat-item">
+          <div class="stat-label">🛡️ Dodge</div>
+          <div class="stat-value dodge" id="my-dodge">0%</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">💥 Critical</div>
+          <div class="stat-value crit" id="my-crit">0%</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">❤️ HP</div>
+          <div class="stat-value" id="my-hp-text">100/100</div>
+        </div>
+      </div>
+
+      <div class="timer">
+        <div class="timer-circle" id="timer">15</div>
+      </div>
+
+      <div class="question-card">
+        <div class="question-text" id="question-text">Question text</div>
+        <div class="question-meta" id="question-meta">Wave 1</div>
+      </div>
+
+      <div class="options" id="options"></div>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="result-screen" class="screen">
+      <div class="result">
+        <h2 id="result-title">Game Over!</h2>
+        <div class="score" id="final-score">0</div>
+        <div class="rank" id="final-rank">#1</div>
+        <div class="leaderboard" id="leaderboard">
+          <h3>🏆 Leaderboard</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let myPlayer = null;
+    let selectedAvatar = null;
+    let currentTurn = 'PLAYER';
+    let currentQuestionIdx = 0;
+    let timerInterval = null;
+
+    // ===== SPRITE SYSTEM =====
+    const SPRITE_BASE = '/display/sprites/';
+    const PLAYER_COLS = 4, PLAYER_ROWS = 4;
+    const PLAYER_FRAMES = {
+      idle:   [{col:0,row:0},{col:1,row:0}],
+      attack: [{col:2,row:0},{col:3,row:0},{col:0,row:1},{col:1,row:1}],
+      hit:    [{col:2,row:1},{col:3,row:1}],
+      defend: [{col:0,row:2},{col:1,row:2}],
+      death:  [{col:2,row:2},{col:3,row:2},{col:0,row:3},{col:1,row:3}]
+    };
+    const spriteMap = { 1:'knight.png', 2:'mage.png', 3:'archer.png', 4:'ninja.png', 5:'healer.png', 6:'berserker.png' };
+    const spriteCache = {};
+
+    function loadSprite(filename) {
+      if (filename in spriteCache) return spriteCache[filename];
+      const img = new Image();
+      img.src = SPRITE_BASE + filename;
+      spriteCache[filename] = null;
+      img.onload = () => { spriteCache[filename] = img; };
+      return null;
+    }
+
+    function getPlayerImg(avatarId) {
+      const f = spriteMap[avatarId];
+      if (!f) return null;
+      if (!(f in spriteCache)) loadSprite(f);
+      return spriteCache[f];
+    }
+
+    function drawPlayerFrame(ctx, avatarId, state, frameIdx, size) {
+      const img = getPlayerImg(avatarId);
+      if (!img) return false;
+      const frames = PLAYER_FRAMES[state];
+      if (!frames || frames.length === 0) return false;
+      const frame = frames[frameIdx % frames.length];
+      const cellW = img.width / PLAYER_COLS;
+      const cellH = img.height / PLAYER_ROWS;
+      ctx.clearRect(0, 0, size, size);
+      ctx.drawImage(img, frame.col * cellW, frame.row * cellH, cellW, cellH, 0, 0, size, size);
+      return true;
+    }
+
+    function getAvatarEmoji(id) {
+      return { 1: '⚔️', 2: '🧙', 3: '🏹', 4: '🥷', 5: '💒', 6: '💪' }[id] || '👤';
+    }
+
+    // Idle animation loop for avatar cards
+    const avatarAnims = new Map(); // avatarId -> { canvas, ctx, frameIdx, timer }
+
+    function startIdleAnim(avatarId, canvas, size) {
+      const ctx = canvas.getContext('2d');
+      const entry = { canvas, ctx, frameIdx: 0, timer: 0, size };
+      avatarAnims.set(avatarId, entry);
+    }
+
+    function tickAvatarAnims(dt) {
+      for (const [avatarId, entry] of avatarAnims) {
+        entry.timer += dt;
+        if (entry.timer >= 0.4) {
+          entry.timer -= 0.4;
+          entry.frameIdx++;
+          drawPlayerFrame(entry.ctx, avatarId, 'idle', entry.frameIdx, entry.size);
+        }
+      }
+    }
+
+    // Main avatar canvas (game header) animation
+    let mainAvatarAnim = null;
+
+    function startMainIdleAnim(avatarId) {
+      const canvas = document.getElementById('my-avatar-canvas');
+      if (!canvas) return;
+      mainAvatarAnim = { canvas, ctx: canvas.getContext('2d'), avatarId, frameIdx: 0, timer: 0 };
+    }
+
+    function tickMainAvatar(dt) {
+      if (!mainAvatarAnim) return;
+      mainAvatarAnim.timer += dt;
+      if (mainAvatarAnim.timer >= 0.4) {
+        mainAvatarAnim.timer -= 0.4;
+        mainAvatarAnim.frameIdx++;
+        drawPlayerFrame(mainAvatarAnim.ctx, mainAvatarAnim.avatarId, 'idle', mainAvatarAnim.frameIdx, 48);
+      }
+    }
+
+    // Global animation ticker
+    let lastTick = performance.now();
+    function animLoop(now) {
+      const dt = (now - lastTick) / 1000;
+      lastTick = now;
+      tickAvatarAnims(dt);
+      tickMainAvatar(dt);
+      requestAnimationFrame(animLoop);
+    }
+    requestAnimationFrame(animLoop);
+
+    // DOM
+    const screens = {
+      join: document.getElementById('join-screen'),
+      avatar: document.getElementById('avatar-screen'),
+      waiting: document.getElementById('waiting-screen'),
+      game: document.getElementById('game-screen'),
+      result: document.getElementById('result-screen')
+    };
+    const els = {
+      roomCode: document.getElementById('room-code'),
+      playerName: document.getElementById('player-name'),
+      joinBtn: document.getElementById('join-btn'),
+      joinError: document.getElementById('join-error'),
+      avatarGrid: document.getElementById('avatar-grid'),
+      confirmAvatarBtn: document.getElementById('confirm-avatar-btn'),
+      waitingPlayers: document.getElementById('waiting-players'),
+      turnIndicator: document.getElementById('turn-indicator'),
+      questionText: document.getElementById('question-text'),
+      questionMeta: document.getElementById('question-meta'),
+      roundDisplay: document.getElementById('round-display'),
+      options: document.getElementById('options'),
+      timer: document.getElementById('timer'),
+      myAvatar: document.getElementById('my-avatar'),
+      myName: document.getElementById('my-name'),
+      myScore: document.getElementById('my-score'),
+      myHp: document.getElementById('my-hp'),
+      myHpText: document.getElementById('my-hp-text'),
+      myDodge: document.getElementById('my-dodge'),
+      myCrit: document.getElementById('my-crit'),
+      resultTitle: document.getElementById('result-title'),
+      finalScore: document.getElementById('final-score'),
+      finalRank: document.getElementById('final-rank'),
+      leaderboard: document.getElementById('leaderboard')
+    };
+
+    function showScreen(name) {
+      Object.values(screens).forEach(s => s.classList.remove('active'));
+      screens[name].classList.add('active');
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomFromUrl = urlParams.get('room');
+    if (roomFromUrl) els.roomCode.value = roomFromUrl;
+
+    async function loadAvatars() {
+      const res = await fetch('/api/avatars');
+      const data = await res.json();
+      if (data.success) {
+        els.avatarGrid.innerHTML = data.avatars.map(a => `
+          <div class="avatar-card" data-id="${a.id}">
+            <div class="avatar-icon"><canvas width="64" height="64" data-avatar-id="${a.id}"></canvas></div>
+            <div class="avatar-name">${a.name}</div>
+            <div class="avatar-class">${a.class}</div>
+            <div class="avatar-stats" style="font-size:0.65rem;color:#7F8C8D;margin-top:4px;">${a.stats}</div>
+            <div class="avatar-special" style="font-size:0.6rem;color:#F1C40F;margin-top:2px;font-style:italic;">⭐ ${a.special}</div>
+          </div>
+        `).join('');
+
+        // Draw initial idle frame + start animation for each
+        document.querySelectorAll('.avatar-icon canvas').forEach(canvas => {
+          const avatarId = parseInt(canvas.dataset.avatarId);
+          // Try draw immediately (if sprite loaded)
+          const tryDraw = () => {
+            if (!drawPlayerFrame(canvas.getContext('2d'), avatarId, 'idle', 0, 64)) {
+              // Fallback: draw emoji
+              const ctx = canvas.getContext('2d');
+              ctx.font = '40px serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(getAvatarEmoji(avatarId), 32, 32);
+            }
+          };
+          tryDraw();
+          // Retry once after load
+          const img = getPlayerImg(avatarId);
+          if (img && img.complete) {} else {
+            const f = spriteMap[avatarId];
+            if (f && spriteCache[f] === null) {
+              const origOnload = null; // will retry on next tick
+            }
+          }
+          startIdleAnim(avatarId, canvas, 64);
+        });
+
+        // Retry draw for sprites still loading
+        setTimeout(() => {
+          document.querySelectorAll('.avatar-icon canvas').forEach(canvas => {
+            const avatarId = parseInt(canvas.dataset.avatarId);
+            drawPlayerFrame(canvas.getContext('2d'), avatarId, 'idle', 0, 64);
+          });
+        }, 500);
+
+        document.querySelectorAll('.avatar-card').forEach(card => {
+          card.addEventListener('click', () => {
+            document.querySelectorAll('.avatar-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            selectedAvatar = parseInt(card.dataset.id);
+            els.confirmAvatarBtn.disabled = false;
+          });
+        });
+      }
+    }
+
+    // Join
+    els.joinBtn.addEventListener('click', () => {
+      const roomId = els.roomCode.value.trim().toUpperCase();
+      const playerName = els.playerName.value.trim();
+      if (!roomId) { els.joinError.textContent = 'Please enter room code'; els.joinError.style.display = 'block'; return; }
+      if (!playerName) { els.joinError.textContent = 'Please enter your name'; els.joinError.style.display = 'block'; return; }
+      els.joinBtn.disabled = true;
+      els.joinError.style.display = 'none';
+      socket.emit('join-room', { roomId, playerName }, (res) => {
+        if (res.success) { myPlayer = res.player; loadAvatars(); showScreen('avatar'); }
+        else { els.joinError.textContent = res.error; els.joinError.style.display = 'block'; els.joinBtn.disabled = false; }
+      });
+    });
+
+    // Avatar
+    els.confirmAvatarBtn.addEventListener('click', () => {
+      if (!selectedAvatar) return;
+      socket.emit('select-avatar', { avatarId: selectedAvatar }, (res) => {
+        if (res.success) { myPlayer = res.player; updateWaitingScreen(); showScreen('waiting'); }
+      });
+    });
+
+    function updateWaitingScreen() {
+      els.waitingPlayers.innerHTML = `<div class="player-tag" style="background:#0F3460;padding:10px 20px;border-radius:25px;display:inline-block;margin:5px;">✅ ${myPlayer.name}</div>`;
+    }
+
+    socket.on('player-joined', ({ player }) => {
+      const tag = document.createElement('div');
+      tag.style.cssText = 'background:#0F3460;padding:10px 20px;border-radius:25px;display:inline-block;margin:5px;';
+      tag.textContent = player.name;
+      els.waitingPlayers.appendChild(tag);
+    });
+
+    // Game Start
+    socket.on('game-start', ({ players, monsters, currentWave, turn, round }) => {
+      const me = players.find(p => p.id === socket.id);
+      if (me) {
+        myPlayer = me;
+        startMainIdleAnim(me.avatar);
+        drawPlayerFrame(document.getElementById('my-avatar-canvas').getContext('2d'), me.avatar, 'idle', 0, 48);
+        els.myName.textContent = me.name;
+        updateStatsUI();
+      }
+      currentTurn = turn;
+      updateTurnIndicator(turn, round);
+      showScreen('game');
+    });
+
+    // New Question
+    socket.on('new-question', ({ questionIdx, question, timeLimit, turn, monsters: waveMonsters, wave, round }) => {
+      currentTurn = turn;
+      currentQuestionIdx = questionIdx;
+
+      const monsterNames = (waveMonsters || []).map(m => m.name).join(' & ');
+      const totalMonsterHp = (waveMonsters || []).reduce((s, m) => s + m.hp, 0);
+      const maxMonsterDmg = Math.max(...(waveMonsters || []).map(m => m.damage), 0);
+
+      els.questionText.textContent = question.text;
+      els.roundDisplay.textContent = round;
+
+      if (turn === 'PLAYER') {
+        els.turnIndicator.className = 'turn-indicator player';
+        els.turnIndicator.innerHTML = '⚔️ PLAYER TURN - Attack!';
+        els.questionMeta.className = 'question-meta attack';
+        els.questionMeta.textContent = `⚔️ ${monsterNames} | Wave ${wave}`;
+      } else {
+        els.turnIndicator.className = 'turn-indicator monster';
+        els.turnIndicator.innerHTML = `🛡️ MONSTER TURN!`;
+        els.questionMeta.className = 'question-meta defense';
+        els.questionMeta.textContent = `🛡️ Defend! Dodge: ${myPlayer ? myPlayer.dodge : 0}%`;
+      }
+
+      els.options.innerHTML = question.options.map((opt, idx) => `
+        <button class="option-btn" data-idx="${idx}">${opt}</button>
+      `).join('');
+
+      document.querySelectorAll('.option-btn').forEach(btn => {
+        btn.addEventListener('click', () => submitAnswer(parseInt(btn.dataset.idx)));
+      });
+
+      startTimer(timeLimit);
+    });
+
+    // Turn End
+    socket.on('turn-end', ({ turn, players, monsters }) => {
+      const me = players.find(p => p.id === socket.id);
+      if (me) {
+        myPlayer = me;
+        updateStatsUI();
+      }
+    });
+
+    function submitAnswer(answerIdx) {
+      const timeMs = (15 - parseInt(els.timer.textContent)) * 1000;
+      document.querySelectorAll('.option-btn').forEach(btn => btn.disabled = true);
+
+      socket.emit('answer', {
+        questionIdx: currentQuestionIdx,
+        answerIdx,
+        timeMs,
+        turn: currentTurn
+      }, (res) => {
+        if (res.success) {
+          document.querySelectorAll('.option-btn').forEach((btn, idx) => {
+            if (idx === answerIdx) btn.classList.add(res.isCorrect ? 'correct' : 'wrong');
+          });
+
+          if (myPlayer) {
+            myPlayer = { ...myPlayer, ...res.player };
+            updateStatsUI();
+          }
+
+          // Show feedback
+          if (currentTurn === 'PLAYER') {
+            if (res.isCorrect) {
+              // Special effects
+              if (res.multiShot && res.multiShot.triggered) {
+                showDamagePopup(`🏹 Multi-Shot! +${res.multiShot.damage} bonus!`, 'crit');
+              }
+              if (res.isCritical && res.critMult >= 3) {
+                showDamagePopup(`🔥 BURST! CRIT x3! ${res.damage} damage!`, 'crit');
+              } else if (res.isCritical) {
+                showDamagePopup(`💥 CRITICAL x2! ${res.damage} damage!`, 'crit');
+              } else {
+                showDamagePopup(`⚔️ ${res.damage} damage!`, 'normal');
+              }
+              if (res.specialTriggered && !res.isCritical && !res.multiShot) {
+                // Ninja Assassinate
+                showDamagePopup(`🗡️ Assassinate! Auto-Crit! ${res.damage} damage!`, 'crit');
+              }
+            } else {
+              showDamagePopup('❌ Miss!', 'normal');
+            }
+          } else {
+            if (res.isCorrect) {
+              if (res.counter) {
+                showDamagePopup(`⚔️ Counter! ${res.counter.damage} damage!`, 'crit');
+              }
+              if (res.heal) {
+                setTimeout(() => showDamagePopup(`💚 Healed ${res.heal.targetName} +${res.heal.healed} HP!`, 'heal'), res.counter ? 800 : 0);
+              } else if (!res.counter) {
+                showDamagePopup('🛡️ Defended!', 'heal');
+              }
+            } else {
+              if (res.isDodged) {
+                showDamagePopup('💨 Dodged!', 'dodge');
+              } else {
+                showDamagePopup(`💥 ${res.damage} damage!`, 'normal');
+              }
+            }
+          }
+        }
+      });
+      clearInterval(timerInterval);
+    }
+
+    function showDamagePopup(text, type) {
+      const popup = document.createElement('div');
+      popup.className = 'damage-popup ' + type;
+      popup.textContent = text;
+      document.body.appendChild(popup);
+      setTimeout(() => popup.remove(), 1500);
+    }
+
+    function updateTurnIndicator(turn, round) {
+      if (turn === 'PLAYER') {
+        els.turnIndicator.className = 'turn-indicator player';
+        els.turnIndicator.innerHTML = '⚔️ PLAYER TURN - Attack!';
+      } else {
+        els.turnIndicator.innerHTML = '🛡️ MONSTER TURN - Defend!';
+      }
+    }
+
+    function updateStatsUI() {
+      if (!myPlayer) return;
+      els.myScore.textContent = myPlayer.score;
+      const hpPct = (myPlayer.hp / myPlayer.maxHp) * 100;
+      els.myHp.style.width = hpPct + '%';
+      els.myHp.className = 'hp-fill' + (hpPct < 30 ? ' low' : hpPct < 60 ? ' mid' : '');
+      els.myHpText.textContent = `${myPlayer.hp}/${myPlayer.maxHp}`;
+      els.myDodge.textContent = myPlayer.dodge + '%';
+      els.myCrit.textContent = myPlayer.critical + '%';
+    }
+
+    function startTimer(seconds) {
+      let remaining = seconds;
+      els.timer.textContent = remaining;
+      els.timer.classList.remove('warning');
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        remaining--;
+        els.timer.textContent = remaining;
+        if (remaining <= 5) els.timer.classList.add('warning');
+        if (remaining <= 0) {
+          clearInterval(timerInterval);
+          submitAnswer(-1);
+        }
+      }, 1000);
+    }
+
+    // Wave complete
+    socket.on('wave-complete', ({ defeatedMonster, nextMonster, wave }) => {
+      showDamagePopup(`🎉 ${defeatedMonster.name} defeated!`, 'heal');
+    });
+
+    // Game Over
+    socket.on('game-over', ({ players, winner, reason }) => {
+      clearInterval(timerInterval);
+      const sorted = [...players].sort((a, b) => b.score - a.score);
+      const me = players.find(p => p.id === socket.id);
+      const rank = sorted.findIndex(p => p.id === socket.id) + 1;
+      els.resultTitle.textContent = winner && winner.id === socket.id ? '🏆 Victory!' : 'Game Over!';
+      if (reason) els.resultTitle.textContent += `\n${reason}`;
+      els.finalScore.textContent = me ? me.score : 0;
+      els.finalRank.textContent = `#${rank}`;
+      els.leaderboard.innerHTML = `<h3>🏆 Leaderboard</h3>` + sorted.map((p, i) => `
+        <div class="leaderboard-item${i === 0 ? '' : ''}">
+          <span class="leaderboard-rank">#${i + 1}</span>
+          <span class="leaderboard-name"><canvas class="lb-sprite" data-avatar="${p.avatar}" width="24" height="24" style="vertical-align:middle;margin-right:4px;image-rendering:pixelated;"></canvas>${p.name}</span>
+          <span class="leaderboard-score">${p.score}</span>
+        </div>
+      `).join('');
+      // Draw leaderboard sprites
+      document.querySelectorAll('.lb-sprite').forEach(canvas => {
+        const aid = parseInt(canvas.dataset.avatar);
+        drawPlayerFrame(canvas.getContext('2d'), aid, 'idle', 0, 24);
+        // Retry after load
+        setTimeout(() => drawPlayerFrame(canvas.getContext('2d'), aid, 'idle', 0, 24), 500);
+      });
+      showScreen('result');
+    });
+
+    socket.on('disconnect', () => console.log('Disconnected'));
+
+    // Preload all player sprites
+    Object.values(spriteMap).forEach(loadSprite);
+    loadAvatars();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1849 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dungeon Quizzers - Main Display</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #0a0a1a;
+      color: #ECF0F1;
+      overflow: hidden;
+    }
+    #game-container { width: 100vw; height: 100vh; position: relative; }
+
+    /* ===== LOBBY ===== */
+    #lobby-screen {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #1A1A2E 0%, #16213E 100%);
+    }
+    .lobby-title { font-size: 4rem; color: #F1C40F; text-shadow: 3px 3px 6px rgba(0,0,0,0.5); }
+    .lobby-subtitle { font-size: 1.5rem; color: #95A5A6; margin: 10px 0 40px; }
+    .qr-section {
+      display: flex; align-items: center; gap: 40px;
+      background: rgba(255,255,255,0.05); padding: 30px 50px; border-radius: 20px; border: 2px solid #0F3460;
+    }
+    .qr-code { background: white; padding: 15px; border-radius: 10px; }
+    .qr-code img { width: 200px; height: 200px; }
+    .room-info { text-align: left; }
+    .room-code { font-size: 3rem; font-weight: bold; color: #F1C40F; letter-spacing: 5px; }
+    .room-instruction { color: #95A5A6; margin-top: 10px; }
+    .players-waiting { margin-top: 40px; display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
+    .player-tag {
+      background: #0F3460; padding: 10px 20px; border-radius: 25px; font-size: 1.1rem;
+      display: flex; align-items: center; gap: 8px; animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+    .btn-create {
+      margin-top: 30px; padding: 15px 40px; font-size: 1.2rem;
+      background: #4A90D9; color: white; border: none; border-radius: 10px; cursor: pointer;
+    }
+    .btn-start {
+      margin-top: 15px; padding: 15px 40px; font-size: 1.2rem;
+      background: #2ECC71; color: white; border: none; border-radius: 10px; cursor: pointer; display: none;
+    }
+    .player-count { margin-top: 20px; color: #95A5A6; }
+
+    /* ===== GAME SCREEN ===== */
+    #game-screen { width: 100%; height: 100%; display: none; position: relative; }
+    #game-canvas { width: 100%; height: 100%; display: block; }
+
+    /* HUD */
+    .hud-top {
+      position: absolute; top: 0; left: 0; right: 0; padding: 15px 25px;
+      display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none;
+    }
+    .hud-box {
+      background: rgba(0,0,0,0.75); padding: 12px 20px; border-radius: 12px;
+      backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.1);
+    }
+    .hud-label { font-size: 0.75rem; color: #95A5A6; text-transform: uppercase; letter-spacing: 1px; }
+    .hud-value { font-size: 1.3rem; font-weight: bold; color: #F1C40F; }
+
+    /* Monster HP Bar — compact top-right, no overlap with question */
+    .monster-hud {
+      position: absolute; top: 80px; right: 20px; width: 260px;
+      pointer-events: none; z-index: 10;
+    }
+    .monster-hp-row { margin-bottom: 8px; }
+    .monster-name-bar {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;
+    }
+    .monster-name { font-size: 0.8rem; font-weight: bold; color: #E74C3C; }
+    .monster-hp-text { font-size: 0.7rem; color: #ECF0F1; }
+    .hp-track {
+      width: 100%; height: 10px; background: #34495E; border-radius: 5px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .hp-fill { height: 100%; border-radius: 5px; transition: width 0.5s ease; }
+    .hp-fill.boss { background: linear-gradient(90deg, #8E44AD, #E74C3C); }
+    .hp-fill.monster { background: linear-gradient(90deg, #E74C3C, #C0392B); }
+
+    /* Player HP Bars — compact bottom strip */
+    .players-hud {
+      position: absolute; bottom: 10px; left: 10px; right: 10px;
+      display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; pointer-events: none;
+    }
+    .player-hp-card {
+      background: rgba(0,0,0,0.8); padding: 5px 10px; border-radius: 8px; min-width: 110px; flex: 1 1 auto; max-width: 180px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .player-hp-name { font-size: 0.7rem; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .player-hp-track { width: 100%; height: 6px; background: #34495E; border-radius: 3px; overflow: hidden; }
+    .player-hp-fill { height: 100%; background: #2ECC71; border-radius: 3px; transition: width 0.5s; }
+    .player-hp-fill.low { background: #E74C3C; }
+    .player-hp-fill.mid { background: #F39C12; }
+
+    /* Question Overlay — top-center, no overlap with monster HP */
+    .question-overlay {
+      position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.88); padding: 18px 30px; border-radius: 14px;
+      width: 60%; max-width: 700px; text-align: center; pointer-events: none;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .q-text { font-size: 1.3rem; margin-bottom: 10px; line-height: 1.4; }
+    .q-type { font-size: 0.8rem; color: #95A5A6; margin-bottom: 10px; }
+    .q-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .q-opt {
+      background: #16213E; padding: 12px 10px; border-radius: 8px; border: 2px solid #0F3460; font-size: 1rem;
+    }
+    .q-opt.correct { border-color: #2ECC71; background: rgba(46,204,113,0.2); }
+    .q-opt.wrong { border-color: #E74C3C; background: rgba(231,76,60,0.2); }
+
+    /* Battle Effects */
+    .battle-popup {
+      position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 3rem; pointer-events: none; z-index: 100;
+      animation: popupAnim 1s ease-out forwards;
+    }
+    @keyframes popupAnim {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+      30% { opacity: 1; transform: translate(-50%, -50%) scale(1.4); }
+      100% { opacity: 0; transform: translate(-50%, -80%) scale(1); }
+    }
+
+    /* Wave Banner */
+    .wave-banner {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 3rem; font-weight: bold; color: #F1C40F; pointer-events: none; z-index: 100;
+      text-shadow: 3px 3px 10px rgba(0,0,0,0.8);
+      animation: bannerAnim 2.5s ease-out forwards;
+    }
+    @keyframes bannerAnim {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+      20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+      70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+    }
+
+    /* Leaderboard Overlay */
+    .leaderboard-overlay {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 200;
+    }
+    .lb-title { font-size: 3rem; color: #F1C40F; margin-bottom: 10px; }
+    .lb-winner { font-size: 1.5rem; margin-bottom: 30px; color: #ECF0F1; }
+    .lb-list { width: 400px; max-width: 90vw; }
+    .lb-item {
+      display: flex; align-items: center; gap: 15px; padding: 12px 18px;
+      background: rgba(255,255,255,0.05); border-radius: 10px; margin-bottom: 8px;
+    }
+    .lb-item.first { background: rgba(241,196,15,0.15); border: 2px solid #F1C40F; }
+    .lb-rank { font-size: 1.3rem; font-weight: bold; color: #F1C40F; width: 40px; text-align: center; }
+    .lb-avatar { font-size: 1.8rem; }
+    .lb-name { flex: 1; font-size: 1.1rem; }
+    .lb-score { font-size: 1.2rem; font-weight: bold; color: #F1C40F; }
+
+    /* Turn Indicator Banner */
+    .turn-banner {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 2.5rem; font-weight: bold; pointer-events: none; z-index: 100;
+      text-shadow: 3px 3px 10px rgba(0,0,0,0.8);
+      padding: 15px 40px; border-radius: 15px;
+      animation: turnBannerAnim 1.5s ease-out forwards;
+    }
+    .turn-banner.player { 
+      background: linear-gradient(135deg, rgba(39,174,96,0.9), rgba(46,204,113,0.9)); 
+      color: white; 
+    }
+    .turn-banner.monster { 
+      background: linear-gradient(135deg, rgba(192,57,43,0.9), rgba(231,76,60,0.9)); 
+      color: white; 
+    }
+    @keyframes turnBannerAnim {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+      20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+      70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+    }
+
+    /* Player Stats in HP Card */
+    .player-hp-stats { display: flex; gap: 6px; margin-top: 2px; font-size: 0.6rem; }
+    .player-stat { padding: 1px 4px; border-radius: 3px; background: rgba(0,0,0,0.3); }
+    .player-stat.dodge { color: #3498DB; }
+    .player-stat.crit { color: #E74C3C; }
+
+    /* Screen shake */
+    .shake { animation: shakeAnim 0.3s ease; }
+    @keyframes shakeAnim {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-8px); }
+      40% { transform: translateX(8px); }
+      60% { transform: translateX(-5px); }
+      80% { transform: translateX(5px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <!-- ===== LOBBY ===== -->
+    <div id="lobby-screen">
+      <h1 class="lobby-title">🏰 Dungeon Quizzers</h1>
+      <p class="lobby-subtitle">Quiz Battle Game</p>
+      <div class="qr-section" id="qr-section" style="display: none;">
+        <div class="qr-code" id="qr-code"></div>
+        <div class="room-info">
+          <div class="room-code" id="room-code">------</div>
+          <div class="room-instruction">Scan QR or go to <span id="join-url"></span></div>
+        </div>
+      </div>
+      <button class="btn-create" id="create-btn">Create Room</button>
+      <button class="btn-start" id="start-btn">⚔️ Start Game</button>
+      <div class="players-waiting" id="players-waiting"></div>
+      <div class="player-count">Players: <span id="p-count">0</span>/10</div>
+    </div>
+
+    <!-- ===== GAME ===== -->
+    <div id="game-screen">
+      <canvas id="game-canvas"></canvas>
+
+      <!-- HUD Top -->
+      <div class="hud-top">
+        <div class="hud-box">
+          <div class="hud-label">Wave</div>
+          <div class="hud-value" id="hud-wave">1 / 4</div>
+        </div>
+        <div class="hud-box" style="text-align: center;">
+          <div class="hud-label">Score</div>
+          <div class="hud-value" id="hud-score">0</div>
+        </div>
+        <div class="hud-box" style="text-align: right;">
+          <div class="hud-label">Question</div>
+          <div class="hud-value" id="hud-question">0 / 0</div>
+        </div>
+      </div>
+
+      <!-- Monster HP -->
+      <div class="monster-hud" id="monster-hud">
+        <div class="monster-name-bar">
+          <span class="monster-name" id="m-name">👹 Monster</span>
+          <span class="monster-hp-text" id="m-hp-text">100 / 100</span>
+        </div>
+        <div class="hp-track">
+          <div class="hp-fill boss" id="m-hp-bar" style="width: 100%"></div>
+        </div>
+      </div>
+
+      <!-- Player HPs -->
+      <div class="players-hud" id="players-hud"></div>
+
+      <!-- Question Overlay -->
+      <div class="question-overlay" id="q-overlay" style="display: none;">
+        <div class="q-text" id="q-text">Question?</div>
+        <div class="q-type" id="q-type">Type: attack</div>
+        <div class="q-options" id="q-options">
+          <div class="q-opt" id="qo-0">A</div>
+          <div class="q-opt" id="qo-1">B</div>
+          <div class="q-opt" id="qo-2">C</div>
+          <div class="q-opt" id="qo-3">D</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // ==================== SOCKET ====================
+    const socket = io();
+    let roomId = null;
+    let isHost = false;
+    let players = [];
+    let currentMonsters = [];
+    let currentWave = 1;
+
+    // DOM
+    const $ = id => document.getElementById(id);
+
+    // ==================== AVATAR EMOJI ====================
+    const AVATAR_EMOJI = { 0: '👤', 1: '⚔️', 2: '🧙', 3: '🏹', 4: '🥷', 5: '💒', 6: '💪' };
+    const AVATAR_COLORS = { 1: '#4A90D9', 2: '#9B59B6', 3: '#27AE60', 4: '#2C3E50', 5: '#ECF0F1', 6: '#E74C3C' };
+    const AVATAR_NAMES = { 1: 'Knight', 2: 'Mage', 3: 'Archer', 4: 'Ninja', 5: 'Healer', 6: 'Berserker' };
+    function getEmoji(id) { return AVATAR_EMOJI[id] || '👤'; }
+    function getColor(id) { return AVATAR_COLORS[id] || '#4A90D9'; }
+    function getClassName(id) { return AVATAR_NAMES[id] || 'Hero'; }
+
+    // ==================== LOBBY ====================
+    $('create-btn').addEventListener('click', () => {
+      socket.emit('create-room', (res) => {
+        if (res.success) {
+          roomId = res.room.id;
+          isHost = true;
+          $('qr-code').innerHTML = `<img src="${res.room.qrImage}" alt="QR">`;
+          $('room-code').textContent = roomId;
+          $('join-url').textContent = location.host + '/player/?room=' + roomId;
+          $('qr-section').style.display = 'flex';
+          $('create-btn').style.display = 'none';
+          $('start-btn').style.display = 'block';
+        }
+      });
+    });
+
+    $('start-btn').addEventListener('click', () => {
+      if (players.length === 0) { alert('Wait for players to join!'); return; }
+      if (!players.every(p => p.ready)) { alert('Not all players have selected avatars!'); return; }
+      socket.emit('start-game', { roomId }, (res) => {
+        if (!res.success) alert('Error: ' + res.error);
+      });
+    });
+
+    socket.on('player-joined', ({ player }) => { players.push(player); refreshLobby(); });
+    socket.on('avatar-selected', ({ playerId, avatarId }) => {
+      const p = players.find(x => x.id === playerId);
+      if (p) { p.avatar = avatarId; p.ready = true; refreshLobby(); }
+    });
+    socket.on('player-left', ({ playerId }) => {
+      players = players.filter(p => p.id !== playerId);
+      refreshLobby();
+    });
+
+    function refreshLobby() {
+      $('p-count').textContent = players.length;
+      $('players-waiting').innerHTML = players.map(p =>
+        `<div class="player-tag">${getEmoji(p.avatar || 0)} ${p.name} ${p.ready ? '✅' : '⏳'}</div>`
+      ).join('');
+      const allReady = players.length > 0 && players.every(p => p.ready);
+      $('start-btn').style.opacity = allReady ? '1' : '0.5';
+      $('start-btn').style.pointerEvents = allReady ? 'auto' : 'none';
+    }
+
+    // ==================== GAME START ====================
+    socket.on('game-start', ({ players: gp, monsters, currentWave: wave }) => {
+      players = gp;
+      currentMonsters = monsters.filter(m => m.wave === wave);
+      currentWave = wave;
+
+      $('lobby-screen').style.display = 'none';
+      $('game-screen').style.display = 'block';
+
+      initCanvas();
+      generateStaticObjects(currentWave);
+      refreshPlayerHP();
+      updateMonsterHP();
+      buildEntities();
+      showWaveBanner(wave, currentMonsters.map(m => m.name).join(' & '));
+    });
+
+    // ==================== NEW QUESTION ====================
+    socket.on('new-question', ({ questionIdx, question, timeLimit, turn, monsters: waveMonsters, wave, round }) => {
+      currentWave = wave;
+      currentMonsters = waveMonsters || currentMonsters;
+      
+      // Build names for display
+      const monsterNames = currentMonsters.map(m => m.name).join(' & ');
+      
+      $('q-text').textContent = question.text;
+      $('hud-question').textContent = `${questionIdx + 1} / 20`;
+      $('hud-wave').textContent = `${wave} / 4`;
+
+      // Turn-based display
+      if (turn === 'PLAYER') {
+        $('q-type').textContent = `⚔️ Attack — Wave ${wave} (${monsterNames})`;
+        $('q-type').style.color = '#E74C3C';
+      } else {
+        $('q-type').textContent = `🛡️ Defend! Dodge: ${players.find(p => p.id === socket.id)?.dodge || 0}%`;
+        $('q-type').style.color = '#3498DB';
+      }
+
+      const options = $('q-options');
+      options.innerHTML = question.options.map((o, i) =>
+        `<div class="q-opt" id="qo-${i}">${o}</div>`
+      ).join('');
+
+      $('q-overlay').style.display = 'block';
+
+      // Show turn banner
+      showTurnBanner(turn);
+    });
+
+    // ==================== TURN END ====================
+    socket.on('turn-end', ({ turn, players: allP, monsters: allMonsters, damagedPlayerIds, healedPlayers, counteredPlayers }) => {
+      players = allP;
+      
+      // Update all monsters
+      if (allMonsters) {
+        currentMonsters = allMonsters.filter(m => m.wave === currentWave);
+        // Also update full monster list
+        allMonsters.forEach(updated => {
+          const full = currentMonsters.find(m => m.id === updated.id);
+          if (full) { full.hp = updated.hp; full.maxHp = updated.maxHp; }
+        });
+      }
+      
+      updateMonsterHP();
+      refreshPlayerHP();
+      // Trigger death anim on monsters that just hit 0 HP
+      spriteEntities.forEach(e => {
+        if (e.type === 'monster') {
+          const mData = currentMonsters.find(m => m.id === e.monsterId);
+          if (mData && mData.hp <= 0 && !e.dying) {
+            e.dying = true;
+            e.animState = 'death';
+            e.animFrame = 0;
+          }
+        }
+        // Trigger death anim on players that just hit 0 HP
+        if (e.type === 'player') {
+          const pData = players[e.playerIdx];
+          if (pData && pData.hp <= 0 && !e.dying) {
+            e.dying = true;
+            e.animState = 'death';
+            e.animFrame = 0;
+          }
+        }
+      });
+      triggerShake();
+      playSound('hit');
+    });
+
+    // battle-result is now handled by turn-end above
+
+    // ==================== WAVE COMPLETE ====================
+    socket.on('wave-complete', ({ defeatedMonsters, nextWave, monsters: nextMonsters }) => {
+      showPopup(`🎉 Wave ${currentWave} cleared!`);
+      const oldWave = currentWave;
+      currentMonsters = nextMonsters || [];
+      // Start visual transition
+      startWaveTransition(oldWave, nextWave);
+      playSound('victory');
+    });
+
+    // ==================== GAME OVER ====================
+    socket.on('game-over', ({ players: fp, winner }) => {
+      $('q-overlay').style.display = 'none';
+      showLeaderboard(fp, winner);
+      playSound('fanfare');
+    });
+
+    // ==================== HUD UPDATES ====================
+    function updateMonsterHP() {
+      if (!currentMonsters || currentMonsters.length === 0) return;
+      
+      const hud = $('monster-hud');
+      hud.innerHTML = currentMonsters.map((m, i) => {
+        const pct = Math.max(0, (m.hp / m.maxHp) * 100);
+        const isBoss = m.type === 'boss';
+        const icon = isBoss ? '👹' : '🐉';
+        const dead = m.hp <= 0;
+        return `<div class="monster-hp-row" style="${dead ? 'opacity:0.35;' : ''}">
+          <div class="monster-name-bar">
+            <span class="monster-name">${icon} ${m.name}${dead ? ' ☠' : ''}</span>
+            <span class="monster-hp-text">${Math.max(0, m.hp)}/${m.maxHp}</span>
+          </div>
+          <div class="hp-track">
+            <div class="hp-fill ${isBoss ? 'boss' : 'monster'}" style="width:${pct}%"></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function refreshPlayerHP() {
+      const totalScore = players.reduce((s, p) => s + p.score, 0);
+      $('hud-score').textContent = totalScore;
+
+      const compact = players.length > 4;
+      $('players-hud').innerHTML = players.map(p => {
+        const pct = p.hp <= 0 ? 0 : (p.hp / p.maxHp) * 100;
+        const cls = p.hp <= 0 ? 'low' : pct < 30 ? 'low' : pct < 60 ? 'mid' : '';
+        const deadLabel = p.hp <= 0 ? ' ☠' : '';
+        return `<div class="player-hp-card" style="${p.hp <= 0 ? 'opacity:0.45;' : ''}">
+          <div class="player-hp-name">${getEmoji(p.avatar)} ${p.name}${deadLabel}</div>
+          <div class="player-hp-track"><div class="player-hp-fill ${cls}" style="width:${pct}%"></div></div>
+          ${compact ? '' : `<div class="player-hp-stats">
+            <span class="player-stat dodge">🛡${p.dodge || 0}%</span>
+            <span class="player-stat crit">💥${p.critical || 0}%</span>
+          </div>`}
+        </div>`;
+      }).join('');
+    }
+
+    function showTurnBanner(turn) {
+      const el = document.createElement('div');
+      el.className = `turn-banner ${turn}`;
+      el.textContent = turn === 'PLAYER' ? '⚔️ PLAYER TURN!' : '🛡️ MONSTER TURN!';
+      $('game-screen').appendChild(el);
+      setTimeout(() => el.remove(), 1500);
+    }
+
+    // ==================== EFFECTS ====================
+    function showPopup(text) {
+      const el = document.createElement('div');
+      el.className = 'battle-popup';
+      el.textContent = text;
+      $('game-screen').appendChild(el);
+      setTimeout(() => el.remove(), 1200);
+    }
+
+    function showWaveBanner(wave, name) {
+      const el = document.createElement('div');
+      el.className = 'wave-banner';
+      el.innerHTML = `WAVE ${wave}<br><span style="font-size:1.5rem;color:#ECF0F1">${name}</span>`;
+      $('game-screen').appendChild(el);
+      setTimeout(() => el.remove(), 2800);
+    }
+
+    function triggerShake() {
+      const canvas = $('game-canvas');
+      canvas.classList.add('shake');
+      setTimeout(() => canvas.classList.remove('shake'), 350);
+    }
+
+    // ==================== SOUNDS (Web Audio) ====================
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Resume AudioContext on first user interaction (browser autoplay policy)
+    function resumeAudio() {
+      if (audioCtx.state === 'suspended') return audioCtx.resume();
+      return Promise.resolve();
+    }
+    document.addEventListener('click', resumeAudio, { once: true });
+    document.addEventListener('keydown', resumeAudio, { once: true });
+
+    function playSound(type) {
+      resumeAudio().then(() => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        gain.gain.value = 0.15;
+
+        switch (type) {
+          case 'hit':
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.15);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            break;
+          case 'victory':
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.3);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+            break;
+          case 'fanfare':
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523, audioCtx.currentTime);
+            osc.frequency.setValueAtTime(659, audioCtx.currentTime + 0.15);
+            osc.frequency.setValueAtTime(784, audioCtx.currentTime + 0.3);
+            osc.frequency.setValueAtTime(1047, audioCtx.currentTime + 0.45);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.8);
+            break;
+        }
+      });
+    }
+
+    // ==================== LEADERBOARD ====================
+    function showLeaderboard(fp, winner) {
+      const sorted = [...fp].sort((a, b) => b.score - a.score);
+      const overlay = document.createElement('div');
+      overlay.className = 'leaderboard-overlay';
+      overlay.innerHTML = `
+        <div class="lb-title">🏆 Game Over!</div>
+        <div class="lb-winner">Winner: ${getEmoji(winner.avatar)} ${winner.name} — ${winner.score} pts</div>
+        <div class="lb-list">
+          ${sorted.map((p, i) => `
+            <div class="lb-item ${i === 0 ? 'first' : ''}">
+              <div class="lb-rank">#${i + 1}</div>
+              <div class="lb-avatar">${getEmoji(p.avatar)}</div>
+              <div class="lb-name">${p.name}</div>
+              <div class="lb-score">${p.score}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      $('game-screen').appendChild(overlay);
+    }
+
+    // ==================== SPRITE SHEET SYSTEM (per BIBLE.md) ====================
+    const SPRITE_BASE = '/display/sprites/';
+    const spriteCache = {}; // filename -> {img, cols, rows}
+
+    // BIBLE Section 8: Player sprite sheet (4 columns x 4 rows)
+    const PLAYER_COLS = 4, PLAYER_ROWS = 4;
+    const PLAYER_FRAMES = {
+      idle:   [{col:0,row:0},{col:1,row:0}],
+      attack: [{col:2,row:0},{col:3,row:0},{col:0,row:1},{col:1,row:1}],
+      hit:    [{col:2,row:1},{col:3,row:1}],
+      defend: [{col:0,row:2},{col:1,row:2}],
+      death:  [{col:2,row:2},{col:3,row:2},{col:0,row:3},{col:1,row:3}]
+    };
+
+    // Monster sprite sheet (4 columns x 4 rows — same layout as player)
+    const MONSTER_COLS = 4, MONSTER_ROWS = 4;
+    const MONSTER_FRAMES = {
+      idle:   [{col:0,row:0},{col:1,row:0}],
+      attack: [{col:2,row:0},{col:3,row:0},{col:0,row:1},{col:1,row:1}],
+      hit:    [{col:2,row:1},{col:3,row:1}],
+      defend: [{col:0,row:2},{col:1,row:2}],
+      death:  [{col:2,row:2},{col:3,row:2},{col:0,row:3},{col:1,row:3}]
+    };
+
+    // Sprite filename mapping
+    const spriteMap = {
+      players: { 1:'knight.png', 2:'mage.png', 3:'archer.png', 4:'ninja.png', 5:'healer.png', 6:'berserker.png' },
+      monsters: { 'Slime':'slime.png','Goblin':'goblin.png','Skeleton':'skeleton.png','Orc':'orc.png','Dragon':'dragon.png','Demon Lord':'demon-lord.png' }
+    };
+
+    function loadSpriteSheet(filename) {
+      if (filename in spriteCache) return spriteCache[filename];
+      const img = new Image();
+      img.src = SPRITE_BASE + filename;
+      spriteCache[filename] = null;
+      img.onload = () => { spriteCache[filename] = { img }; };
+      img.onerror = () => { spriteCache[filename] = null; };
+      return null;
+    }
+
+    function getPlayerSheet(avatarId) {
+      const f = spriteMap.players[avatarId];
+      if (!f) return null;
+      if (!(f in spriteCache)) loadSpriteSheet(f);
+      return spriteCache[f];
+    }
+
+    function getMonsterSheet(name) {
+      const f = spriteMap.monsters[name];
+      if (!f) return null;
+      if (!(f in spriteCache)) loadSpriteSheet(f);
+      return spriteCache[f];
+    }
+
+    function preloadAllSprites() {
+      Object.values(spriteMap.players).forEach(loadSpriteSheet);
+      Object.values(spriteMap.monsters).forEach(loadSpriteSheet);
+    }
+
+    // Draw a frame from sprite sheet. cellW = img.width/cols, cellH = img.height/rows. flipH = horizontal mirror.
+    function drawSheetFrame(sheetEntry, frames, cols, rows, state, frameIdx, x, y, size, flipH) {
+      if (!sheetEntry || !sheetEntry.img) return false;
+      const frameList = frames[state];
+      if (!frameList || frameList.length === 0) return false;
+      const frame = frameList[frameIdx % frameList.length];
+      const cellW = sheetEntry.img.width / cols;
+      const cellH = sheetEntry.img.height / rows;
+      const dx = x - size / 2;
+      const dy = y - size;
+      ctx.save();
+      if (flipH) {
+        // Mirror around center of destination rect (x, y - size/2)
+        ctx.translate(x, y - size / 2);
+        ctx.scale(-1, 1);
+        ctx.drawImage(
+          sheetEntry.img,
+          frame.col * cellW, frame.row * cellH, cellW, cellH,
+          -size / 2, -size / 2, size, size
+        );
+      } else {
+        ctx.drawImage(
+          sheetEntry.img,
+          frame.col * cellW, frame.row * cellH, cellW, cellH,
+          dx, dy, size, size
+        );
+      }
+      ctx.restore();
+      return true;
+    }
+
+    // ==================== 2.5D CANVAS (Paper Mario style) ====================
+    let ctx, W, H;
+    let spriteEntities = [];
+
+    // ==================== SCENE SYSTEM ====================
+    // Each wave has its own scene with parallax layers
+    const SCENES = {
+      1: { // Forest Path
+        sky: ['#071a0a','#0f2a12','#0a1a0d'],
+        groundTop: '#122a18', groundBot: '#081510',
+        groundLine: 'rgba(74,217,144,0.25)', gridLine: 'rgba(74,217,144,0.06)',
+        stars: false, fogColor: 'rgba(100,180,120,0.04)',
+        // Parallax layers: [yStart, color, shapes[]]
+        farLayer: { y: 0.45, color: '#0a1a10', shapes: 'forestFar' },
+        midLayer: { y: 0.55, color: '#0e2218', shapes: 'forestMid' },
+      },
+      2: { // Stone Ruins
+        sky: ['#1a0a2e','#16213e','#0a1628'],
+        groundTop: '#1a2030', groundBot: '#0a1520',
+        groundLine: 'rgba(100,140,200,0.25)', gridLine: 'rgba(100,140,200,0.06)',
+        stars: true, fogColor: 'rgba(100,140,200,0.03)',
+        farLayer: { y: 0.42, color: '#0e1428', shapes: 'ruinsFar' },
+        midLayer: { y: 0.52, color: '#141c30', shapes: 'ruinsMid' },
+      },
+      3: { // Dark Cave
+        sky: ['#050508','#0a0a12','#060610'],
+        groundTop: '#101018', groundBot: '#060610',
+        groundLine: 'rgba(100,80,180,0.2)', gridLine: 'rgba(100,80,180,0.05)',
+        stars: false, fogColor: 'rgba(60,40,120,0.05)',
+        farLayer: { y: 0.40, color: '#08080e', shapes: 'caveFar' },
+        midLayer: { y: 0.50, color: '#0c0c18', shapes: 'caveMid' },
+      },
+      4: { // Demon Throne
+        sky: ['#1a0505','#2a0a0a','#1a0505'],
+        groundTop: '#200e0a', groundBot: '#100808',
+        groundLine: 'rgba(231,76,60,0.25)', gridLine: 'rgba(231,76,60,0.06)',
+        stars: false, fogColor: 'rgba(200,60,40,0.04)',
+        farLayer: { y: 0.42, color: '#140808', shapes: 'throneFar' },
+        midLayer: { y: 0.52, color: '#1c0c0c', shapes: 'throneMid' },
+      }
+    };
+
+    // Stars (pre-generated)
+    let stars = [];
+    function generateStars() {
+      stars = [];
+      for (let i = 0; i < 60; i++) {
+        stars.push({
+          x: Math.random(), y: Math.random() * 0.5,
+          size: 0.5 + Math.random() * 1.5,
+          twinkle: Math.random() * Math.PI * 2,
+          speed: 0.5 + Math.random() * 2
+        });
+      }
+    }
+
+    // Parallax scroll state
+    let scrollX = 0;
+    let scrollTarget = 0;
+    let scrollSpeed = 0;
+
+    // Wave transition state
+    let waveTransition = {
+      active: false,
+      phase: 'none',     // 'none' | 'fadeOut' | 'scroll' | 'fadeIn'
+      timer: 0,
+      fromWave: 1,
+      toWave: 2,
+      duration: 2.5      // total seconds
+    };
+
+    function startWaveTransition(fromWave, toWave) {
+      waveTransition = {
+        active: true,
+        phase: 'fadeOut',
+        timer: 0,
+        fromWave, toWave,
+        duration: 2.5
+      };
+      scrollTarget = -W; // scroll everything left by screen width
+    }
+
+    function updateTransition(dt) {
+      if (!waveTransition.active) return;
+      const t = waveTransition;
+      t.timer += dt;
+
+      const fadeDur = 0.4;   // fade out/in duration
+      const scrollDur = 1.7; // scroll duration
+
+      if (t.phase === 'fadeOut' && t.timer >= fadeDur) {
+        t.phase = 'scroll';
+        t.timer = 0;
+        // Actually switch wave now (midpoint)
+        currentWave = t.toWave;
+        scrollX = 0; // reset for new scene
+        generateStaticObjects(currentWave);
+        buildEntities();
+        updateMonsterHP();
+      } else if (t.phase === 'scroll' && t.timer >= scrollDur) {
+        t.phase = 'fadeIn';
+        t.timer = 0;
+      } else if (t.phase === 'fadeIn' && t.timer >= fadeDur) {
+        t.active = false;
+        t.phase = 'none';
+        scrollX = 0;
+        scrollTarget = 0;
+        // Show wave banner after transition completes
+        showWaveBanner(t.toWave, currentMonsters.map(m => m.name).join(' & '));
+      }
+    }
+
+    function getTransitionAlpha() {
+      if (!waveTransition.active) return 1;
+      const t = waveTransition;
+      if (t.phase === 'fadeOut') {
+        return 1 - (t.timer / 0.4);
+      } else if (t.phase === 'scroll') {
+        return 0;
+      } else if (t.phase === 'fadeIn') {
+        return t.timer / 0.4;
+      }
+      return 1;
+    }
+
+    function getScene(wave) {
+      return SCENES[wave] || SCENES[1];
+    }
+
+    function drawSceneBackground(scene, time) {
+      // Sky gradient
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.65);
+      skyGrad.addColorStop(0, scene.sky[0]);
+      skyGrad.addColorStop(0.5, scene.sky[1]);
+      skyGrad.addColorStop(1, scene.sky[2]);
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Stars (only for scenes with stars)
+      if (scene.stars) {
+        stars.forEach(s => {
+          const alpha = 0.2 + 0.3 * Math.sin(time * s.speed + s.twinkle);
+          ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+          ctx.fillRect(s.x * W, s.y * H, s.size, s.size);
+        });
+      }
+    }
+
+    function drawParallaxLayer(layer, time) {
+      const baseY = layer.y * H;
+      const offsetX = scrollX * (layer === getScene(currentWave).farLayer ? 0.3 : 0.6);
+
+      ctx.fillStyle = layer.color;
+
+      if (layer.shapes === 'forestFar') {
+        // Distant tree line
+        for (let i = -1; i < W / 80 + 2; i++) {
+          const x = i * 80 - (offsetX % 80);
+          const h = 30 + Math.sin(i * 1.7) * 20;
+          ctx.beginPath();
+          ctx.moveTo(x, baseY);
+          ctx.lineTo(x + 40, baseY - h);
+          ctx.lineTo(x + 80, baseY);
+          ctx.fill();
+        }
+      } else if (layer.shapes === 'forestMid') {
+        // Closer trees
+        for (let i = -1; i < W / 120 + 2; i++) {
+          const x = i * 120 - (offsetX % 120);
+          const h = 50 + Math.sin(i * 2.3) * 30;
+          // Trunk
+          ctx.fillRect(x + 50, baseY - h * 0.3, 8, h * 0.3);
+          // Canopy
+          ctx.beginPath();
+          ctx.moveTo(x + 10, baseY - h * 0.3);
+          ctx.lineTo(x + 54, baseY - h);
+          ctx.lineTo(x + 98, baseY - h * 0.3);
+          ctx.fill();
+        }
+      } else if (layer.shapes === 'ruinsFar') {
+        // Distant broken walls (segments with gaps)
+        for (let i = -1; i < W / 160 + 2; i++) {
+          const x = i * 160 - (offsetX % 160);
+          const h = 40 + Math.sin(i * 1.3) * 20;
+          // Left segment
+          ctx.fillRect(x, baseY - h, 35, h);
+          // Right segment (gap in middle)
+          ctx.fillRect(x + 60, baseY - h, 40, h);
+        }
+      } else if (layer.shapes === 'ruinsMid') {
+        // Broken pillars
+        for (let i = -1; i < W / 200 + 2; i++) {
+          const x = i * 200 - (offsetX % 200);
+          const h = 60 + Math.sin(i * 2.1) * 25;
+          ctx.fillRect(x, baseY - h, 16, h);
+          // Top block
+          ctx.fillRect(x - 6, baseY - h - 8, 28, 10);
+          // Broken top (angled)
+          if (i % 2 === 0) {
+            ctx.beginPath();
+            ctx.moveTo(x + 8, baseY - h - 8);
+            ctx.lineTo(x + 22, baseY - h - 18);
+            ctx.lineTo(x + 22, baseY - h - 8);
+            ctx.fill();
+          }
+        }
+      } else if (layer.shapes === 'caveFar') {
+        // Stalactites from top
+        for (let i = -1; i < W / 100 + 2; i++) {
+          const x = i * 100 - (offsetX % 100);
+          const h = 20 + Math.sin(i * 1.9) * 15;
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x + 10, baseY + h);
+          ctx.lineTo(x + 20, 0);
+          ctx.fill();
+        }
+        // Stalagmites from bottom
+        for (let i = -1; i < W / 130 + 2; i++) {
+          const x = i * 130 - (offsetX % 130) + 50;
+          const h = 15 + Math.sin(i * 2.7) * 10;
+          ctx.beginPath();
+          ctx.moveTo(x, H);
+          ctx.lineTo(x + 12, baseY - h);
+          ctx.lineTo(x + 24, H);
+          ctx.fill();
+        }
+      } else if (layer.shapes === 'caveMid') {
+        // Large stalactites
+        for (let i = -1; i < W / 180 + 2; i++) {
+          const x = i * 180 - (offsetX % 180);
+          const h = 40 + Math.sin(i * 1.5) * 25;
+          ctx.beginPath();
+          ctx.moveTo(x - 5, 0);
+          ctx.lineTo(x + 12, baseY + h);
+          ctx.lineTo(x + 29, 0);
+          ctx.fill();
+        }
+      } else if (layer.shapes === 'throneFar') {
+        // Dark pillars with fire glow
+        for (let i = -1; i < W / 200 + 2; i++) {
+          const x = i * 200 - (offsetX % 200);
+          const h = 70 + Math.sin(i * 1.1) * 20;
+          ctx.fillRect(x, baseY - h, 20, h);
+          // Fire glow on top
+          const flicker = Math.sin(time * 4 + i) * 3;
+          ctx.fillStyle = `rgba(231,76,60,${0.3 + Math.sin(time * 3 + i) * 0.15})`;
+          ctx.beginPath();
+          ctx.arc(x + 10, baseY - h - 10 + flicker, 12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = layer.color;
+        }
+      } else if (layer.shapes === 'throneMid') {
+        // Skull pedestals
+        for (let i = -1; i < W / 250 + 2; i++) {
+          const x = i * 250 - (offsetX % 250);
+          const h = 30 + Math.sin(i * 2.9) * 10;
+          // Pedestal
+          ctx.fillRect(x, baseY - h, 30, h);
+          // Skull
+          ctx.beginPath();
+          ctx.arc(x + 15, baseY - h - 10, 8, 0, Math.PI * 2);
+          ctx.fill();
+          // Eye sockets
+          ctx.fillStyle = `rgba(231,76,60,${0.4 + Math.sin(time * 2 + i) * 0.2})`;
+          ctx.fillRect(x + 10, baseY - h - 12, 3, 3);
+          ctx.fillRect(x + 17, baseY - h - 12, 3, 3);
+          ctx.fillStyle = layer.color;
+        }
+      }
+    }
+
+    function drawGround(scene) {
+      const groundY = H * 0.65;
+
+      // Ground fill
+      const groundGrad = ctx.createLinearGradient(0, groundY, 0, H);
+      groundGrad.addColorStop(0, scene.groundTop);
+      groundGrad.addColorStop(1, scene.groundBot);
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(0, groundY, W, H - groundY);
+
+      // Ground line
+      ctx.strokeStyle = scene.groundLine;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, groundY);
+      ctx.lineTo(W, groundY);
+      ctx.stroke();
+
+      // Stone grid pattern (perspective)
+      ctx.strokeStyle = scene.gridLine;
+      ctx.lineWidth = 1;
+
+      // Horizontal lines (spacing increases with distance)
+      for (let i = 0; i < 15; i++) {
+        const t = i / 15;
+        const gy = groundY + t * t * (H - groundY); // quadratic spacing
+        ctx.beginPath();
+        ctx.moveTo(0, gy);
+        ctx.lineTo(W, gy);
+        ctx.stroke();
+      }
+
+      // Vertical lines (perspective convergence)
+      const vanishX = W / 2;
+      const vanishY = groundY - 20;
+      for (let i = -10; i <= 10; i++) {
+        const bx = vanishX + i * (W / 8);
+        ctx.beginPath();
+        ctx.moveTo(vanishX + (bx - vanishX) * 0.05, vanishY);
+        ctx.lineTo(bx, H);
+        ctx.stroke();
+      }
+    }
+
+    function drawVignette() {
+      // Radial vignette from center
+      const grad = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.85);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    function drawFog(scene, time) {
+      if (!scene.fogColor) return;
+      // Low fog bands
+      const groundY = H * 0.65;
+      for (let i = 0; i < 3; i++) {
+        const y = groundY + 20 + i * 30;
+        const drift = Math.sin(time * 0.3 + i * 1.5) * 40 + scrollX * 0.1;
+        ctx.fillStyle = scene.fogColor;
+        ctx.beginPath();
+        ctx.ellipse(W/2 + drift, y, W * 0.6, 15 + i * 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ==================== PHASE 2: STATIC SCENE OBJECTS ====================
+    // Pre-generated positions for static objects (rebuild on resize/wave change)
+    let staticObjects = { left: [], right: [] };
+
+    function generateStaticObjects(wave) {
+      const groundY = H * 0.65;
+      const left = [], right = [];
+
+      if (wave === 1) {
+        // Forest: mushrooms, rocks, tree stumps
+        for (let i = 0; i < 4; i++) {
+          left.push({ type: 'mushroom', x: W * 0.03 + i * W * 0.04, y: groundY + 5 + Math.sin(i) * 8, size: 6 + Math.random() * 4 });
+        }
+        for (let i = 0; i < 3; i++) {
+          right.push({ type: 'rock', x: W * 0.88 + i * W * 0.04, y: groundY + 3 + Math.sin(i * 2) * 5, size: 8 + Math.random() * 6 });
+        }
+        left.push({ type: 'stump', x: W * 0.08, y: groundY, size: 14 });
+        right.push({ type: 'stump', x: W * 0.92, y: groundY, size: 12 });
+      } else if (wave === 2) {
+        // Ruins: broken bricks, cracked stones
+        for (let i = 0; i < 5; i++) {
+          const side = i % 2 === 0 ? left : right;
+          side.push({ type: 'brick', x: (i % 2 === 0 ? W * 0.02 : W * 0.85) + Math.random() * W * 0.08, y: groundY + 2 + Math.random() * 10, size: 5 + Math.random() * 4, angle: Math.random() * 0.5 - 0.25 });
+        }
+        left.push({ type: 'crack', x: W * 0.12, y: groundY + 15 });
+        right.push({ type: 'crack', x: W * 0.85, y: groundY + 20 });
+      } else if (wave === 3) {
+        // Cave: crystals, bones, stalagmites on ground
+        for (let i = 0; i < 3; i++) {
+          left.push({ type: 'crystal', x: W * 0.04 + i * W * 0.05, y: groundY + 2, size: 8 + Math.random() * 5 });
+          right.push({ type: 'crystal', x: W * 0.86 + i * W * 0.045, y: groundY + 2, size: 7 + Math.random() * 6 });
+        }
+        left.push({ type: 'bone', x: W * 0.1, y: groundY + 12 });
+        right.push({ type: 'bone', x: W * 0.88, y: groundY + 8 });
+      } else if (wave === 4) {
+        // Throne: skulls, lava cracks
+        for (let i = 0; i < 3; i++) {
+          left.push({ type: 'skull', x: W * 0.03 + i * W * 0.04, y: groundY + 3, size: 6 + Math.random() * 3 });
+          right.push({ type: 'skull', x: W * 0.88 + i * W * 0.04, y: groundY + 5, size: 6 + Math.random() * 3 });
+        }
+        left.push({ type: 'lavaCrack', x: W * 0.08, y: groundY + 18 });
+        right.push({ type: 'lavaCrack', x: W * 0.9, y: groundY + 22 });
+      }
+
+      staticObjects = { left, right };
+    }
+
+    function drawStaticObjects(time) {
+      const scene = getScene(currentWave);
+      const drawObj = (obj) => {
+        ctx.save();
+        if (obj.angle) { ctx.translate(obj.x, obj.y); ctx.rotate(obj.angle); ctx.translate(-obj.x, -obj.y); }
+
+        switch (obj.type) {
+          case 'mushroom': {
+            // Stem
+            ctx.fillStyle = '#d4a574';
+            ctx.fillRect(obj.x - 2, obj.y - obj.size, 4, obj.size);
+            // Cap
+            ctx.fillStyle = '#c0392b';
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y - obj.size, obj.size * 0.6, Math.PI, 0);
+            ctx.fill();
+            // Dots
+            ctx.fillStyle = '#ecf0f1';
+            ctx.beginPath();
+            ctx.arc(obj.x - 2, obj.y - obj.size - 2, 1.5, 0, Math.PI * 2);
+            ctx.arc(obj.x + 2, obj.y - obj.size - 1, 1, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+          }
+          case 'rock': {
+            ctx.fillStyle = '#4a5568';
+            ctx.beginPath();
+            ctx.ellipse(obj.x, obj.y - obj.size * 0.4, obj.size * 0.7, obj.size * 0.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#5a6578';
+            ctx.beginPath();
+            ctx.ellipse(obj.x - 1, obj.y - obj.size * 0.5, obj.size * 0.4, obj.size * 0.3, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+          }
+          case 'stump': {
+            ctx.fillStyle = '#5d3a1a';
+            ctx.fillRect(obj.x - obj.size * 0.3, obj.y - obj.size, obj.size * 0.6, obj.size);
+            ctx.fillStyle = '#8B6914';
+            ctx.beginPath();
+            ctx.ellipse(obj.x, obj.y - obj.size, obj.size * 0.4, obj.size * 0.15, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Rings
+            ctx.strokeStyle = '#4a2a0a';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y - obj.size, obj.size * 0.2, 0, Math.PI * 2);
+            ctx.stroke();
+            break;
+          }
+          case 'brick': {
+            ctx.fillStyle = '#6b7280';
+            const bw = obj.size * 1.5, bh = obj.size * 0.6;
+            ctx.fillRect(obj.x - bw/2, obj.y - bh, bw, bh);
+            ctx.strokeStyle = '#4b5563';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(obj.x - bw/2, obj.y - bh, bw, bh);
+            break;
+          }
+          case 'crack': {
+            ctx.strokeStyle = 'rgba(100,100,100,0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(obj.x, obj.y);
+            ctx.lineTo(obj.x + 10, obj.y + 8);
+            ctx.lineTo(obj.x + 6, obj.y + 15);
+            ctx.moveTo(obj.x + 10, obj.y + 8);
+            ctx.lineTo(obj.x + 18, obj.y + 5);
+            ctx.stroke();
+            break;
+          }
+          case 'crystal': {
+            const glow = 0.3 + Math.sin(time * 2 + obj.x * 0.1) * 0.15;
+            ctx.fillStyle = `rgba(120,80,220,${glow})`;
+            ctx.beginPath();
+            ctx.moveTo(obj.x, obj.y - obj.size);
+            ctx.lineTo(obj.x - obj.size * 0.3, obj.y);
+            ctx.lineTo(obj.x + obj.size * 0.3, obj.y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = `rgba(180,140,255,${glow * 0.6})`;
+            ctx.beginPath();
+            ctx.moveTo(obj.x + 1, obj.y - obj.size + 2);
+            ctx.lineTo(obj.x + obj.size * 0.15, obj.y - 1);
+            ctx.lineTo(obj.x + obj.size * 0.35, obj.y);
+            ctx.closePath();
+            ctx.fill();
+            break;
+          }
+          case 'bone': {
+            ctx.strokeStyle = '#d4c5a9';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(obj.x, obj.y);
+            ctx.lineTo(obj.x + 15, obj.y - 3);
+            ctx.stroke();
+            ctx.fillStyle = '#d4c5a9';
+            ctx.beginPath(); ctx.arc(obj.x, obj.y, 2.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(obj.x + 15, obj.y - 3, 2.5, 0, Math.PI * 2); ctx.fill();
+            break;
+          }
+          case 'skull': {
+            ctx.fillStyle = '#d4c5a9';
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y - obj.size * 0.5, obj.size * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            // Jaw
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y - obj.size * 0.2, obj.size * 0.35, 0, Math.PI);
+            ctx.fill();
+            // Eyes
+            ctx.fillStyle = '#1a0505';
+            ctx.beginPath(); ctx.arc(obj.x - 2, obj.y - obj.size * 0.55, 1.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(obj.x + 2, obj.y - obj.size * 0.55, 1.5, 0, Math.PI * 2); ctx.fill();
+            break;
+          }
+          case 'lavaCrack': {
+            const glow = 0.4 + Math.sin(time * 1.5 + obj.x * 0.05) * 0.2;
+            ctx.strokeStyle = `rgba(231,76,60,${glow})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(obj.x - 12, obj.y);
+            ctx.lineTo(obj.x - 4, obj.y + 3);
+            ctx.lineTo(obj.x + 3, obj.y - 2);
+            ctx.lineTo(obj.x + 12, obj.y + 1);
+            ctx.stroke();
+            // Glow underneath
+            ctx.fillStyle = `rgba(231,76,60,${glow * 0.3})`;
+            ctx.beginPath();
+            ctx.ellipse(obj.x, obj.y + 2, 14, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+          }
+        }
+        ctx.restore();
+      };
+
+      staticObjects.left.forEach(drawObj);
+      staticObjects.right.forEach(drawObj);
+    }
+
+    function initCanvas() {
+      const canvas = $('game-canvas');
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+      ctx = canvas.getContext('2d');
+      generateStars();
+
+      window.addEventListener('resize', () => {
+        W = canvas.width = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+      generateStars();
+      generateStaticObjects(currentWave);
+        buildEntities();
+      });
+
+      buildEntities();
+      preloadAllSprites();
+      renderLoop();
+    }
+
+    // ==================== PHASE 3: DYNAMIC PARTICLES ====================
+    const MAX_PARTICLES = 40;
+    let particles = [];
+
+    // Particle templates per wave
+    const PARTICLE_DEFS = {
+      1: [ // Forest
+        { type: 'leaf', count: 12, color: '#4a7c3f', size: [2,4], speed: [10,25], drift: true },
+        { type: 'leaf', count: 6, color: '#8B6914', size: [2,3], speed: [8,18], drift: true },
+        { type: 'mist', count: 5, color: 'rgba(180,220,180,0.08)', size: [20,40], speed: [3,8], drift: false },
+      ],
+      2: [ // Ruins
+        { type: 'dust', count: 10, color: 'rgba(160,160,160,0.3)', size: [1,2], speed: [5,15], drift: false },
+        { type: 'ember', count: 6, color: '#e67e22', size: [1,2], speed: [10,30], drift: false },
+      ],
+      3: [ // Cave
+        { type: 'sparkle', count: 8, color: '#a78bfa', size: [1,2], speed: [0,3], drift: false },
+        { type: 'drip', count: 4, color: 'rgba(100,140,255,0.4)', size: [1,1.5], speed: [30,50], drift: false },
+      ],
+      4: [ // Throne
+        { type: 'ember', count: 15, color: '#e74c3c', size: [1,2.5], speed: [15,40], drift: false },
+        { type: 'ember', count: 8, color: '#f39c12', size: [1,2], speed: [10,25], drift: false },
+      ]
+    };
+
+    function spawnParticle(def) {
+      const s = def.size[0] + Math.random() * (def.size[1] - def.size[0]);
+      const sp = def.speed[0] + Math.random() * (def.speed[1] - def.speed[0]);
+      const groundY = H * 0.65;
+
+      let x, y, vx, vy;
+      if (def.type === 'leaf') {
+        x = Math.random() * W;
+        y = Math.random() * groundY * 0.8;
+        vx = -sp * 0.3;
+        vy = sp * 0.1 + Math.random() * 5;
+      } else if (def.type === 'mist') {
+        x = Math.random() * W;
+        y = groundY + 10 + Math.random() * 40;
+        vx = sp * 0.2 * (Math.random() > 0.5 ? 1 : -1);
+        vy = 0;
+      } else if (def.type === 'dust') {
+        x = Math.random() * W;
+        y = groundY + Math.random() * (H - groundY) * 0.3;
+        vx = (Math.random() - 0.5) * sp * 0.3;
+        vy = -sp * 0.15;
+      } else if (def.type === 'ember') {
+        x = Math.random() * W;
+        y = groundY + Math.random() * 20;
+        vx = (Math.random() - 0.5) * sp * 0.2;
+        vy = -sp * 0.4;
+      } else if (def.type === 'sparkle') {
+        x = W * 0.05 + Math.random() * W * 0.15;
+        y = groundY + Math.random() * 5;
+        vx = 0;
+        vy = 0;
+      } else if (def.type === 'drip') {
+        x = W * 0.1 + Math.random() * W * 0.8;
+        y = Math.random() * H * 0.3;
+        vx = 0;
+        vy = sp;
+      } else {
+        x = Math.random() * W;
+        y = Math.random() * H;
+        vx = 0; vy = 0;
+      }
+
+      return {
+        type: def.type, x, y, vx, vy, size: s, color: def.color,
+        life: 1, decay: 0.003 + Math.random() * 0.005,
+        phase: Math.random() * Math.PI * 2, age: 0, maxAge: 3 + Math.random() * 4
+      };
+    }
+
+    function updateParticles(dt, time) {
+      // Spawn new particles up to limit
+      const defs = PARTICLE_DEFS[currentWave] || PARTICLE_DEFS[1];
+      const totalTarget = Math.min(MAX_PARTICLES, defs.reduce((s, d) => s + d.count, 0));
+
+      if (particles.length < totalTarget) {
+        // Pick a random def weighted by count
+        const totalWeight = defs.reduce((s, d) => s + d.count, 0);
+        let r = Math.random() * totalWeight;
+        for (const def of defs) {
+          r -= def.count;
+          if (r <= 0) {
+            particles.push(spawnParticle(def));
+            break;
+          }
+        }
+      }
+
+      // Update existing
+      particles.forEach(p => {
+        p.age += dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+
+        // Drift wobble
+        if (p.type === 'leaf') {
+          p.x += Math.sin(time * 2 + p.phase) * 0.5;
+          p.y += Math.cos(time * 1.5 + p.phase) * 0.3;
+        }
+        if (p.type === 'sparkle') {
+          p.x += Math.sin(time * 3 + p.phase) * 0.3;
+        }
+
+        // Fade based on age
+        p.life = Math.max(0, 1 - p.age / p.maxAge);
+
+        // Reset if off screen or expired
+        if (p.y > H + 10 || p.y < -20 || p.x < -20 || p.x > W + 20 || p.life <= 0) {
+          // Recycle: pick a random def and respawn
+          const def = defs[Math.floor(Math.random() * defs.length)];
+          Object.assign(p, spawnParticle(def));
+        }
+      });
+    }
+
+    function drawParticles(time) {
+      particles.forEach(p => {
+        if (p.life <= 0) return;
+        ctx.globalAlpha = p.life;
+
+        if (p.type === 'leaf') {
+          ctx.fillStyle = p.color;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(time * 1.5 + p.phase);
+          ctx.beginPath();
+          ctx.ellipse(0, 0, p.size, p.size * 0.4, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else if (p.type === 'mist') {
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y, p.size, p.size * 0.3, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.type === 'dust') {
+          ctx.fillStyle = p.color;
+          ctx.fillRect(p.x, p.y, p.size, p.size);
+        } else if (p.type === 'ember') {
+          const glow = 0.6 + Math.sin(time * 5 + p.phase) * 0.4;
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.life * glow;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          // Glow
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.life * glow * 0.3;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.type === 'sparkle') {
+          const glow = 0.3 + Math.sin(time * 4 + p.phase * 3) * 0.7;
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.life * Math.max(0, glow);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.type === 'drip') {
+          ctx.fillStyle = p.color;
+          ctx.fillRect(p.x, p.y, p.size * 0.5, p.size * 2);
+        }
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    function buildEntities() {
+      spriteEntities = [];
+
+      // Ground perspective
+      const groundY = H * 0.65;
+
+      // Monster positions (right side, spread)
+      const aliveMonsters = currentMonsters.filter(m => m.hp > 0);
+      const monsterCount = Math.max(aliveMonsters.length, 1);
+      const mxStart = W * 0.65;
+      const mSpacing = Math.min(120, (W * 0.3) / monsterCount);
+
+      aliveMonsters.forEach((m, i) => {
+        const mx = mxStart + i * mSpacing;
+        const my = groundY;
+        const monsterSize = m.type === 'boss' ? 90 : 65;
+
+        spriteEntities.push({
+          type: 'monster',
+          monsterIdx: i,
+          monsterId: m.id,
+          x: mx, y: my,
+          size: monsterSize,
+          color: m.type === 'boss' ? '#8E44AD' : '#E74C3C',
+          name: m.name,
+          bobPhase: i * 0.5,
+          hitAnim: 0,
+          animState: 'idle',
+          animFrame: 0,
+          animTimer: 0,
+          animSpeed: 0.15
+        });
+      });
+
+      // Player positions (center-left, spread)
+      const startX = W * 0.22;
+      const spacing = Math.min(100, (W * 0.35) / Math.max(players.length, 1));
+
+      players.forEach((p, i) => {
+        spriteEntities.push({
+          type: 'player',
+          playerIdx: i,
+          x: startX + i * spacing,
+          y: groundY,
+          size: 45,
+          color: getColor(p.avatar),
+          name: p.name,
+          emoji: getEmoji(p.avatar),
+          bobPhase: i * 0.5,
+          hitAnim: 0,
+          healFlash: 0,
+          animState: 'idle',
+          animFrame: 0,
+          animTimer: 0,
+          animSpeed: 0.15
+        });
+      });
+    }
+
+    let lastFrameTime = 0;
+
+    // ==================== PHASE 5: LIGHT EFFECTS ====================
+    function drawLightEffects(time) {
+      const groundY = H * 0.65;
+      const wave = currentWave;
+
+      // Per-wave light sources
+      if (wave === 1) {
+        // Forest — warm campfire glow at center
+        const flicker = 0.15 + Math.sin(time * 3) * 0.05 + Math.sin(time * 7) * 0.03;
+        const grad = ctx.createRadialGradient(W * 0.5, groundY - 10, 5, W * 0.5, groundY - 10, 120);
+        grad.addColorStop(0, `rgba(255,160,50,${flicker})`);
+        grad.addColorStop(1, 'rgba(255,160,50,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(W * 0.3, groundY - 130, W * 0.4, 200);
+      } else if (wave === 2) {
+        // Ruins — torch glows on pillars (left + right)
+        const positions = [W * 0.06, W * 0.94];
+        positions.forEach((tx, i) => {
+          const flicker = 0.12 + Math.sin(time * 4 + i * 2) * 0.04;
+          const grad = ctx.createRadialGradient(tx, groundY - 60, 4, tx, groundY - 60, 80);
+          grad.addColorStop(0, `rgba(255,140,40,${flicker})`);
+          grad.addColorStop(1, 'rgba(255,140,40,0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(tx - 80, groundY - 140, 160, 160);
+        });
+      } else if (wave === 3) {
+        // Cave — crystal glow (purple/blue pulses)
+        const crystalPos = [
+          { x: W * 0.08, y: groundY - 20 },
+          { x: W * 0.14, y: groundY - 15 },
+          { x: W * 0.86, y: groundY - 18 },
+          { x: W * 0.92, y: groundY - 22 },
+        ];
+        crystalPos.forEach((c, i) => {
+          const pulse = 0.08 + Math.sin(time * 2 + i * 1.7) * 0.06;
+          const grad = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, 50);
+          grad.addColorStop(0, `rgba(140,100,255,${pulse})`);
+          grad.addColorStop(1, 'rgba(140,100,255,0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(c.x - 50, c.y - 50, 100, 100);
+        });
+      } else if (wave === 4) {
+        // Throne — lava underglow + pillar fire
+        // Lava glow across ground
+        const lavaPulse = 0.06 + Math.sin(time * 1.5) * 0.03;
+        const lavaGrad = ctx.createLinearGradient(0, groundY, 0, H);
+        lavaGrad.addColorStop(0, `rgba(231,76,60,${lavaPulse})`);
+        lavaGrad.addColorStop(1, 'rgba(231,76,60,0)');
+        ctx.fillStyle = lavaGrad;
+        ctx.fillRect(0, groundY, W, H - groundY);
+
+        // Pillar fire glow
+        const positions = [W * 0.06, W * 0.94];
+        positions.forEach((tx, i) => {
+          const flicker = 0.15 + Math.sin(time * 5 + i * 3) * 0.06;
+          const grad = ctx.createRadialGradient(tx, groundY - 70, 5, tx, groundY - 70, 90);
+          grad.addColorStop(0, `rgba(231,76,60,${flicker})`);
+          grad.addColorStop(0.5, `rgba(255,140,40,${flicker * 0.5})`);
+          grad.addColorStop(1, 'rgba(231,76,60,0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(tx - 90, groundY - 160, 180, 200);
+        });
+      }
+    }
+
+    function renderLoop(timestamp) {
+      const dt = lastFrameTime ? (timestamp - lastFrameTime) / 1000 : 0;
+      lastFrameTime = timestamp;
+      drawScene(dt);
+      requestAnimationFrame(renderLoop);
+    }
+
+    function drawScene(dt) {
+      if (!ctx) return;
+      ctx.clearRect(0, 0, W, H);
+
+      // Update transition
+      updateTransition(dt);
+
+      const time = Date.now() / 1000;
+      const scene = getScene(currentWave);
+
+      // Scroll offset during transition
+      let scrollOffset = 0;
+      if (waveTransition.active && waveTransition.phase === 'scroll') {
+        const progress = Math.min(1, waveTransition.timer / 1.7);
+        scrollOffset = -progress * W * 0.3;
+      }
+
+      ctx.save();
+      if (scrollOffset) ctx.translate(scrollOffset, 0);
+
+      // Layer 0: Sky + stars
+      drawSceneBackground(scene, time);
+
+      // Layer 1: Far parallax (distant mountains/structures)
+      drawParallaxLayer(scene.farLayer, time);
+
+      // Layer 2: Mid parallax (closer objects)
+      drawParallaxLayer(scene.midLayer, time);
+
+      // Layer 3: Ground + grid
+      drawGround(scene);
+
+      // Layer 4: Fog
+      drawFog(scene, time);
+
+      // Layer 5: Static scene objects
+      drawStaticObjects(time);
+
+      // Layer 5.5: Dynamic particles
+      updateParticles(dt, time);
+      drawParticles(time);
+
+      // Layer 5.8: Light effects
+      drawLightEffects(time);
+
+      // Layer 6: Entities (players + monsters)
+      spriteEntities.sort((a, b) => a.y - b.y);
+      spriteEntities.forEach(ent => {
+        const bob = ent.dead ? 0 : Math.sin(time * 2 + ent.bobPhase) * 4;
+        const drawY = ent.y + bob;
+
+        // Update animation frame using real delta time
+        ent.animTimer += dt;
+        if (ent.animTimer >= ent.animSpeed) {
+          ent.animTimer = 0;
+          ent.animFrame++;
+          // Check if animation finished
+          const frames = ent.type === 'monster' ? MONSTER_FRAMES : PLAYER_FRAMES;
+          const maxFrame = (frames[ent.animState] || []).length;
+          if (ent.animState !== 'idle' && maxFrame > 0 && ent.animFrame >= maxFrame) {
+            if (ent.dying && ent.type === 'monster') {
+              // Monster death anim done → remove entity
+              ent._remove = true;
+            } else if (ent.dying && ent.type === 'player') {
+              // Player death anim done → stay dead, hold last frame
+              ent.dead = true;
+              ent.animFrame = maxFrame - 1;
+            } else {
+              ent.animState = 'idle';
+              ent.animFrame = 0;
+            }
+          }
+        }
+
+        if (ent.type === 'monster') {
+          drawMonsterSprite(ent.x, drawY, ent.size, ent.color, ent.name, time, ent.hitAnim, ent);
+        } else if (ent.type === 'player') {
+          const p = players[ent.playerIdx];
+          const hp = p ? p.hp : 100;
+          const maxHp = p ? p.maxHp : 100;
+          drawPlayerSprite(ent.x, drawY, ent.size, ent.color, ent.emoji, ent.name, time, hp, maxHp, ent.hitAnim, p ? p.avatar : 0, ent);
+          // Dead player: draw X overlay + fade
+          if (ent.dead) {
+            ctx.globalAlpha = 0.4;
+            ctx.font = `bold ${ent.size * 0.6}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#E74C3C';
+            ctx.fillText('✕', ent.x, ent.y - ent.size * 0.2);
+            ctx.globalAlpha = 1;
+          }
+        }
+
+        // Decay hit shake
+        if (ent.hitAnim > 0) {
+          ent.hitAnim -= 0.05;
+          if (ent.hitAnim <= 0) ent.hitAnim = 0;
+        }
+      });
+
+      ctx.restore(); // end scroll transform
+
+      // Layer 8: Vignette overlay
+      drawVignette();
+
+      // Layer 9: Wave transition fade overlay
+      if (waveTransition.active) {
+        const alpha = waveTransition.phase === 'fadeOut' ? (waveTransition.timer / 0.4) :
+                      waveTransition.phase === 'scroll' ? 1 :
+                      waveTransition.phase === 'fadeIn' ? (1 - waveTransition.timer / 0.4) : 0;
+        ctx.fillStyle = `rgba(0,0,0,${Math.min(1, Math.max(0, alpha))})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // Remove entities marked for removal (death anim done)
+      spriteEntities = spriteEntities.filter(e => !e._remove);
+    }
+
+    function drawMonsterSprite(x, y, size, color, name, time, hitAnim, ent) {
+      const shakeX = hitAnim > 0 ? (Math.random() - 0.5) * 8 : 0;
+      const shakeY = hitAnim > 0 ? (Math.random() - 0.5) * 4 : 0;
+      const sx = x + shakeX;
+      const sy = y + shakeY;
+
+      // Shadow — just below feet for 2.5D grounding
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy + size * 0.1, size * 0.5, size * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Try sprite sheet first
+      const sheet = getMonsterSheet(name);
+      const state = ent ? ent.animState : 'idle';
+      const frame = ent ? ent.animFrame : 0;
+      const drawn = drawSheetFrame(sheet, MONSTER_FRAMES, MONSTER_COLS, MONSTER_ROWS, state, frame, sx, sy, size * 1.2, true);
+
+      if (!drawn) {
+        // Fallback: rounded body with eyes
+        const gradient = ctx.createRadialGradient(sx, sy - size * 0.1, size * 0.1, sx, sy, size);
+        gradient.addColorStop(0, lightenColor(color, 30));
+        gradient.addColorStop(1, color);
+        ctx.fillStyle = gradient;
+
+        const bw = size * 0.8;
+        const bh = size;
+        roundRect(ctx, sx - bw / 2, sy - bh, bw, bh, 12);
+        ctx.fill();
+
+        ctx.fillStyle = '#FFF';
+        ctx.beginPath();
+        ctx.arc(sx - size * 0.15, sy - size * 0.55, size * 0.12, 0, Math.PI * 2);
+        ctx.arc(sx + size * 0.15, sy - size * 0.55, size * 0.12, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(sx - size * 0.15, sy - size * 0.53, size * 0.06, 0, Math.PI * 2);
+        ctx.arc(sx + size * 0.15, sy - size * 0.53, size * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const mouthW = size * 0.3;
+        ctx.moveTo(sx - mouthW / 2, sy - size * 0.3);
+        ctx.quadraticCurveTo(sx, sy - size * 0.2 + Math.sin(time * 3) * 3, sx + mouthW / 2, sy - size * 0.3);
+        ctx.stroke();
+      }
+
+      // Name
+      ctx.fillStyle = '#ECF0F1';
+      ctx.font = `bold ${Math.max(12, size * 0.2)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(name, sx, sy + size * 0.55);
+    }
+
+    function drawPlayerSprite(x, y, size, color, emoji, name, time, hp, maxHp, hitAnim, avatarId, ent) {
+      const shakeX = hitAnim > 0 ? (Math.random() - 0.5) * 6 : 0;
+      const shakeY = hitAnim > 0 ? (Math.random() - 0.5) * 3 : 0;
+      const sx = x + shakeX;
+      const sy = y + shakeY;
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy + 2, size * 0.45, size * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Try sprite sheet first
+      const sheet = getPlayerSheet(avatarId);
+      const state = ent ? ent.animState : 'idle';
+      const frame = ent ? ent.animFrame : 0;
+      const drawn = drawSheetFrame(sheet, PLAYER_FRAMES, PLAYER_COLS, PLAYER_ROWS, state, frame, sx, sy, size * 1.2);
+
+      if (!drawn) {
+        // Fallback: emoji on colored body
+        const gradient = ctx.createRadialGradient(sx, sy - size * 0.3, size * 0.1, sx, sy - size * 0.2, size);
+        gradient.addColorStop(0, lightenColor(color, 40));
+        gradient.addColorStop(1, color);
+        ctx.fillStyle = gradient;
+        roundRect(ctx, sx - size * 0.35, sy - size, size * 0.7, size, 10);
+        ctx.fill();
+
+        ctx.font = `${size * 0.6}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(emoji, sx, sy - size * 0.15);
+      }
+
+      // Name
+      ctx.fillStyle = '#ECF0F1';
+      ctx.font = `bold ${Math.max(10, size * 0.22)}px sans-serif`;
+      ctx.fillText(name, sx, sy + size * 0.35);
+
+      // HP bar
+      const barW = size * 0.8;
+      const barH = 6;
+      const barX = sx - barW / 2;
+      const barY = sy + size * 0.45;
+      const hpPct = Math.max(0, hp / maxHp);
+
+      ctx.fillStyle = '#34495E';
+      roundRect(ctx, barX, barY, barW, barH, 3);
+      ctx.fill();
+
+      ctx.fillStyle = hpPct > 0.5 ? '#2ECC71' : hpPct > 0.25 ? '#F39C12' : '#E74C3C';
+      roundRect(ctx, barX, barY, barW * hpPct, barH, 3);
+      ctx.fill();
+
+      // Heal flash effect
+      if (ent && ent.healFlash > 0) {
+        ctx.fillStyle = `rgba(46, 204, 113, ${ent.healFlash * 0.3})`;
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, size * 0.5, size * 0.7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Heal number
+        ctx.fillStyle = '#2ECC71';
+        ctx.font = `bold ${Math.max(12, size * 0.25)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('💚', sx, sy - size * 0.8 - (1 - ent.healFlash) * 20);
+        ent.healFlash -= 0.02;
+        if (ent.healFlash <= 0) ent.healFlash = 0;
+      }
+    }
+
+    function roundRect(c, x, y, w, h, r) {
+      c.beginPath();
+      c.moveTo(x + r, y);
+      c.lineTo(x + w - r, y);
+      c.quadraticCurveTo(x + w, y, x + w, y + r);
+      c.lineTo(x + w, y + h - r);
+      c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      c.lineTo(x + r, y + h);
+      c.quadraticCurveTo(x, y + h, x, y + h - r);
+      c.lineTo(x, y + r);
+      c.quadraticCurveTo(x, y, x + r, y);
+      c.closePath();
+    }
+
+    function lightenColor(hex, pct) {
+      const num = parseInt(hex.slice(1), 16);
+      const r = Math.min(255, ((num >> 16) & 0xFF) + pct);
+      const g = Math.min(255, ((num >> 8) & 0xFF) + pct);
+      const b = Math.min(255, (num & 0xFF) + pct);
+      return `rgb(${r},${g},${b})`;
+    }
+
+    // Animation triggers on turn-end (merged with data handler above)
+    socket.on('turn-end', ({ turn, players: allP, damagedPlayerIds, healedPlayers, counteredPlayers }) => {
+      players = allP;
+
+      const monsterEnts = spriteEntities.filter(e => e.type === 'monster');
+      const playerEnts = spriteEntities.filter(e => e.type === 'player');
+
+      if (turn === 'PLAYER') {
+        // Player attacked → all alive monsters get hit, all players attack
+        monsterEnts.forEach(e => {
+          if (!e.dying) {
+            e.hitAnim = 1;
+            e.animState = 'hit';
+            e.animFrame = 0;
+          }
+        });
+        playerEnts.forEach(e => {
+          if (!e.dying) {
+            e.animState = 'attack';
+            e.animFrame = 0;
+          }
+        });
+      } else {
+        // Monster attacked → alive monsters attack, players: hit or defend or counter
+        monsterEnts.forEach(e => {
+          if (!e.dying) {
+            e.animState = 'attack';
+            e.animFrame = 0;
+          }
+        });
+        const damaged = new Set(damagedPlayerIds || []);
+        const healed = new Set((healedPlayers || []).map(h => h.targetId));
+        const countered = counteredPlayers || [];
+        playerEnts.forEach(e => {
+          if (e.dying) return; // Skip dying players
+          const pid = players[e.playerIdx]?.id;
+          if (damaged.has(pid)) {
+            e.hitAnim = 1;
+            e.animState = 'hit';
+          } else if (countered.find(c => c.playerId === pid)) {
+            e.animState = 'attack';
+            e.animFrame = 0;
+          } else if (healed.has(pid)) {
+            e.animState = 'defend';
+            e.healFlash = 1;
+          } else {
+            e.animState = 'defend';
+          }
+          e.animFrame = 0;
+        });
+        // Counter hits the specific monster
+        countered.forEach(c => {
+          const targetEnt = monsterEnts.find(e => e.monsterId === c.targetMonsterId);
+          if (targetEnt) {
+            targetEnt.hitAnim = 1;
+            targetEnt.animState = 'hit';
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
