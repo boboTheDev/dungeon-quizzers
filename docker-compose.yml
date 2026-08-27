@@ -1,0 +1,12 @@
+services:
+  dungeon-quizzers:
+    build:
+      context: .
+      args:
+        PORT: ${PORT:-9093}
+    container_name: dungeon-quizzers
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-9093}:${PORT:-9093}"
