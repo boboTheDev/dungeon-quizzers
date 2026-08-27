@@ -19,6 +19,9 @@ const io = new Server(server, {
 app.use(compression());
 app.use(express.json());
 
+// Root → Display screen
+app.get('/', (req, res) => res.redirect('/display'));
+
 // Static files with caching
 app.use(express.static(path.join(__dirname, '..', 'public'), {
   maxAge: '1h',
