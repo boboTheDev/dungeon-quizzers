@@ -4,87 +4,87 @@
 
 ---
 
-## Planet ไหนอยู่ใกล้ดวงอาทิตย์ที่สุด?
-- [ ] ดาวพุธ
-- [x] ดาวศุกร์
-- [ ] โลก
-- [ ] ดาวอังคาร
+## Which planet is closest to the Sun?
+- [ ] Mercury
+- [x] Venus
+- [ ] Earth
+- [ ] Mars
 Time: 15
 Type: attack
 
 ---
 
-## H2O คือสูตรของอะไร?
-- [ ] เกลือ
-- [ ] น้ำตาล
-- [x] น้ำ
-- [ ] น้ำมัน
+## H2O is the chemical formula for what?
+- [ ] Salt
+- [ ] Sugar
+- [x] Water
+- [ ] Oil
 Time: 12
 Type: attack
 
 ---
 
-## ธาตุใดมีสัญลักษณ์ O?
-- [ ] ทองคำ
-- [x] ออกซิเจน
-- [ ] เงิน
-- [ ] เหล็ก
+## Which element has the symbol O?
+- [ ] Gold
+- [x] Oxygen
+- [ ] Silver
+- [ ] Iron
 Time: 15
 Type: attack
 
 ---
 
-## โลกหมุนรอบตัวเองกี่ชั่วโมง?
-- [ ] 12 ชั่วโมง
-- [x] 24 ชั่วโมง
-- [ ] 36 ชั่วโมง
-- [ ] 48 ชั่วโมง
+## How many hours does Earth take to rotate once?
+- [ ] 12 hours
+- [x] 24 hours
+- [ ] 36 hours
+- [ ] 48 hours
 Time: 12
 Type: defense
 
 ---
 
-## สัตว์ใดเป็นสัตว์บกที่ใหญ่ที่สุดในโลก?
-- [ ] ช้าง
-- [x] ย้ายหอย
-- [ ] ยีราฟ
-- [ ] แรด
+## What is the largest land animal on Earth?
+- [ ] Elephant
+- [x] Blue Whale
+- [ ] Giraffe
+- [ ] Rhino
 Time: 15
 Type: attack
 
 ---
 
-## แสงเดินทางได้เร็วแค่ไหน?
-- [ ] 300,000 กม./ชม.
-- [ ] 300,000 กม./นาที
-- [x] 300,000 กม./วินาที
-- [ ] 300,000 กม./เดือน
+## How fast does light travel?
+- [ ] 300,000 km/hour
+- [ ] 300,000 km/minute
+- [x] 300,000 km/second
+- [ ] 300,000 km/month
 Time: 12
-Type: avoid
+Type: defense
 
 ---
 
-## กระดูกมนุษย์มีกี่ชิ้นโดยประมาณ?
-- [ ] 106 ชิ้น
-- [x] 206 ชิ้น
-- [ ] 306 ชิ้น
-- [ ] 406 ชิ้น
+## How many bones does a human body have?
+- [ ] 106
+- [x] 206
+- [ ] 306
+- [ ] 406
 Time: 15
 Type: attack
 
 ---
 
-## ดาวเคราะห์ดวงใดในระบบสุริยะมีวงแหวน?
-- [ ] ดาวอังคาร
-- [ ] ดาวพฤหัสบดี
-- [x] ดาวเสาร์
-- [ ] ดาวยูเรนัส
+## Which planet in our solar system has rings?
+- [ ] Mars
+- [x] Saturn
+- [ ] Jupiter
+- [ ] Neptune
 Time: 12
 Type: attack
 
 ---
 
-## ภาษาน编程ที่นิยมใช้ในเว็บไซต์คืออะไร?
+## What programming language is most popular for websites?
 - [ ] Python
 - [x] JavaScript
 - [ ] C++
@@ -94,10 +94,10 @@ Type: defense
 
 ---
 
-## น้ำทะเลมีรสชาติอย่างไร?
-- [ ] หวาน
-- [x] เค็ม
-- [ ] เปรี้ยว
-- [ ] เผ็ด
-Time: 10
+## What does DNA stand for?
+- [ ] Deoxyribonucleic Acid
+- [x] Deoxyribonucleic Acid
+- [ ] Dynamic Network Access
+- [ ] Digital Node Array
+Time: 12
 Type: attack
