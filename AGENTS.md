@@ -7,6 +7,8 @@ Multiplayer quiz battle game. Players scan QR to join from mobile, fight monster
 - Display: http://localhost:3000/display
 - Player: http://localhost:3000/player?room=[CODE]
 
+**Deploy:** Render Free / Fly.io Free
+
 ## Architecture
 
 ```
@@ -99,15 +101,20 @@ Returns `{ success, isCorrect, damage, isCritical, critMult, specialTriggered, m
 
 - **Methods on Room, not GameManager:** `calculateCriticalDamage()`, `calculateDodge()`, `updatePlayerStats()`, `healPlayer()`, `counterAttack()`, `multiShot()`, `calculateBloodlust()` are Room instance methods. Call `room.method()`, NOT `gameManager.method()`.
 - **defeatedMonster:** Capture `room.currentMonster` BEFORE reassigning to `nextMonster`. Do NOT use `room.monsters.find(m => m.hp <= 0 && m.id < nextMonster.id)` — always returns Slime.
-- **Player death:** Set `player.alive = false` when `player.hp <= 0` after damage. `getAlivePlayers()` filters by `alive` field. Game-over triggers when all players are dead.
-- **Display question overlay:** Position: top-center (80px from top), 80% width, max 900px. Must not block sprites.
-- **Monster HP bar:** `bottom: 130px`, z-index: 10
+- **Player death:** Set `player.alive = false` when `player.hp <= 0` after damage. `getAlivePlayers()` filters by `alive` field. Game-over triggers when all players are dead. Player plays death anim, then stays faded on screen.
+- **Monster death:** Monster plays 4-frame death anim, then entity removed from canvas.
+- **Display question overlay:** Position: top-center (80px from top), 60% width, max 700px.
+- **Monster HP bar:** `top: 80px`, `right: 20px`, compact (260px), z-index: 10. Does NOT overlap question overlay.
+- **Player HP bar:** `bottom: 10px`, compact cards, hides stats when >4 players.
 - **Monster sprite update:** Call `buildEntities()` after changing `currentMonster` in wave-complete handler.
 - **No "Out of questions" game-over:** Questions recycle automatically via shuffle + reset index.
 - **Language:** All UI text in English. Only question/answer content can be in Thai.
-- **Canvas rendering:** Paper Mario style — Canvas 2D with sprite sheets, NOT Three.js. Background gradient + stars + ground grid + shadow ellipses.
+- **Canvas rendering:** Paper Mario style — Canvas 2D with sprite sheets, NOT Three.js.
+- **Scene system:** 4 themed environments (Forest/Ruins/Cave/Throne) with parallax backgrounds, static objects, particles, light effects. Changes per wave.
+- **Wave transition:** Fade-out → scroll → fade-in (2.5s total). Wave banner shows after transition.
 - **Animation speed:** `animSpeed: 0.15` seconds per frame, uses real delta time from `requestAnimationFrame`.
 - **Audio:** Web Audio API (oscillator-based). Requires user interaction (click/touch) first due to browser autoplay policy. `resumeAudio()` called on first click + before every `playSound()`.
+- **Compression:** gzip via `compression` package. Sprites cached 7 days, static files 1 hour.
 
 ## Sprite Sheet System
 
@@ -154,8 +161,8 @@ Frame indices → `{col, row}`:
 **⚠️ Render with `flipH=true`** — monster sprites must be mirrored horizontally when drawn.
 
 ### Sprite Files (actual in `public/display/sprites/`)
-- **Players:** knight.png, mage.png, archer.png (ninja, healer, berserker not yet added)
-- **Monsters:** slime.png (goblin, skeleton, orc, dragon, demon-lord not yet added)
+- **Players:** knight.png, mage.png, archer.png, ninja.png, healer.png, berserker.png
+- **Monsters:** slime.png, goblin.png, skeleton.png, orc.png, dragon.png, demon-lord.png
 
 ### How It Works
 - Canvas loads sprite sheets on init via `preloadAllSprites()` (display) or `Object.values(spriteMap).forEach(loadSprite)` (player)
@@ -235,4 +242,4 @@ const CLASS_STATS = {
 - `sendDefenseQuestion(io, room)` — Sends MONSTER turn question, recycles if exhausted
 
 ## Dependencies
-- express, socket.io, qrcode, gray-matter
+- express, socket.io, qrcode, gray-matter, compression
