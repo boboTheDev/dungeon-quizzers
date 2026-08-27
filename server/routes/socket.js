@@ -17,7 +17,8 @@ function socketHandler(io, socket) {
   // Create room (host)
   socket.on('create-room', async (callback) => {
     const room = gameManager.createRoom(socket.id);
-    const baseUrl = `http://${socket.handshake.headers.host || 'localhost:3000'}`;
+    const protocol = socket.handshake.headers['x-forwarded-proto'] || 'https';
+    const baseUrl = `${protocol}://${socket.handshake.headers.host || 'localhost:3000'}`;
     const qr = await room.getQrUrl(baseUrl);
     
     socket.join(room.id);

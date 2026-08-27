@@ -7,6 +7,9 @@ const apiRoutes = require('./routes/api');
 const socketHandler = require('./routes/socket');
 
 const app = express();
+// Trust the reverse proxy's X-Forwarded-Proto/Host so req.protocol reflects
+// the client's actual scheme (https) when TLS is terminated upstream.
+app.set('trust proxy', true);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
