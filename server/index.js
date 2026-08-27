@@ -7,6 +7,9 @@ const apiRoutes = require('./routes/api');
 const socketHandler = require('./routes/socket');
 
 const app = express();
+// Trust the reverse proxy's X-Forwarded-Proto/Host so req.protocol reflects
+// the client's actual scheme (https) when TLS is terminated upstream.
+app.set('trust proxy', true);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -18,6 +21,9 @@ const io = new Server(server, {
 // Gzip compression
 app.use(compression());
 app.use(express.json());
+
+// Root → Display screen
+app.get('/', (req, res) => res.redirect('/display'));
 
 // Static files with caching
 app.use(express.static(path.join(__dirname, '..', 'public'), {
