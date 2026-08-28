@@ -24,6 +24,7 @@ class Room {
     this.turn = 'PLAYER'; // PLAYER or MONSTER
     this.round = 0;
     this.createdAt = Date.now();
+    this.hostDisconnectedAt = null; // set when host (display) disconnects
   }
 
   generateId() {
@@ -43,9 +44,10 @@ class Room {
     return { url, qrDataUrl };
   }
 
-  addPlayer(socketId, playerName) {
+  addPlayer(socketId, playerName, playerId) {
     const player = {
       id: socketId,
+      playerId: playerId || this.generatePlayerId(),
       name: playerName,
       avatar: null,
       hp: 100,
@@ -55,10 +57,15 @@ class Room {
       dodge: 0,        // 0-50%
       critical: 0,     // 0-25%
       alive: true,
-      ready: false
+      ready: false,
+      connected: true
     };
     this.players.set(socketId, player);
     return player;
+  }
+
+  generatePlayerId() {
+    return 'p_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
   }
 
   removePlayer(socketId) {
@@ -68,6 +75,24 @@ class Room {
       if (firstPlayer) {
         this.hostSocketId = firstPlayer;
       }
+    }
+  }
+
+  // Mark a player as disconnected but keep them in the room (for rejoin during game)
+  markDisconnected(socketId) {
+    const player = this.players.get(socketId);
+    if (player) {
+      player.connected = false;
+      player.disconnectedAt = Date.now();
+    }
+  }
+
+  // Clear disconnect state when a player rejoins
+  clearDisconnected(socketId) {
+    const player = this.players.get(socketId);
+    if (player) {
+      player.connected = true;
+      delete player.disconnectedAt;
     }
   }
 
@@ -197,6 +222,11 @@ class Room {
     return Array.from(this.players.values()).filter(p => p.alive);
   }
 
+  // Alive AND currently connected players (used to determine who must answer)
+  getActivePlayers() {
+    return Array.from(this.players.values()).filter(p => p.alive && p.connected);
+  }
+
   // Get all alive monsters in current wave
   getAliveMonstersInWave(wave) {
     return this.monsters.filter(m => m.wave === wave && m.hp > 0);
@@ -245,13 +275,13 @@ class GameManager {
     return roomId ? this.rooms.get(roomId) : null;
   }
 
-  joinRoom(roomId, socketId, playerName) {
+  joinRoom(roomId, socketId, playerName, playerId) {
     const room = this.rooms.get(roomId);
     if (!room) return { error: 'Room not found' };
     if (room.state !== 'LOBBY') return { error: 'Game already started' };
     if (room.players.size >= 10) return { error: 'Room is full' };
 
-    const player = room.addPlayer(socketId, playerName);
+    const player = room.addPlayer(socketId, playerName, playerId);
     this.socketToRoom.set(socketId, roomId);
     return { room, player };
   }
@@ -262,6 +292,18 @@ class GameManager {
 
     const room = this.rooms.get(roomId);
     if (room) {
+      // If the host (display) disconnected, track it for timeout
+      if (room.hostSocketId === socketId) {
+        room.hostDisconnectedAt = Date.now();
+      }
+
+      // During an active game, keep the player in the room so they can rejoin.
+      // Only fully remove them if the game hasn't started (LOBBY) or is finished.
+      if (room.state === 'PLAYING') {
+        room.markDisconnected(socketId);
+        // Don't delete socketToRoom mapping so we can find the room on rejoin
+        return;
+      }
       room.removePlayer(socketId);
       if (room.players.size === 0) {
         this.rooms.delete(roomId);
@@ -269,6 +311,138 @@ class GameManager {
       }
     }
     this.socketToRoom.delete(socketId);
+  }
+
+  // Rejoin a disconnected player using their stable playerId
+  rejoinPlayer(roomId, playerId, newSocketId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return { error: 'Room not found' };
+
+    // Find the player by stable playerId
+    let targetPlayer = null;
+    let oldSocketId = null;
+    for (const [sid, p] of room.players) {
+      if (p.playerId === playerId) {
+        targetPlayer = p;
+        oldSocketId = sid;
+        break;
+      }
+    }
+
+    if (!targetPlayer) return { error: 'Player not found' };
+
+    // If the player is already connected on this socket, nothing to do
+    if (oldSocketId === newSocketId) {
+      return { room, player: targetPlayer, rejoined: false };
+    }
+
+    // Remove old socket mapping, update player to new socket
+    room.players.delete(oldSocketId);
+    targetPlayer.id = newSocketId;
+    targetPlayer.connected = true;
+    delete targetPlayer.disconnectedAt;
+    room.players.set(newSocketId, targetPlayer);
+
+    // Update socketToRoom mapping
+    this.socketToRoom.delete(oldSocketId);
+    this.socketToRoom.set(newSocketId, roomId);
+
+    // If this player was the host, update hostSocketId
+    if (room.hostSocketId === oldSocketId) {
+      room.hostSocketId = newSocketId;
+      room.hostDisconnectedAt = null;
+    }
+
+    return { room, player: targetPlayer, rejoined: true };
+  }
+
+  // Check for players/host that have been disconnected too long and handle timeouts.
+  // Returns an array of actions to take: { type: 'kickPlayer', roomId, playerId } or { type: 'endGame', roomId }
+  checkTimeouts() {
+    const now = Date.now();
+    const actions = [];
+
+    for (const [roomId, room] of this.rooms) {
+      // Host (display) timeout: 300s -> end the game
+      if (room.state === 'PLAYING' && room.hostDisconnectedAt) {
+        if (now - room.hostDisconnectedAt > 300 * 1000) {
+          actions.push({ type: 'endGame', roomId });
+          continue;
+        }
+      }
+
+      // Player timeout: 120s -> kick out
+      for (const [sid, p] of room.players) {
+        if (!p.connected && p.disconnectedAt && now - p.disconnectedAt > 120 * 1000) {
+          actions.push({ type: 'kickPlayer', roomId, playerId: p.playerId, socketId: sid });
+        }
+      }
+    }
+
+    return actions;
+  }
+
+  // Kick a player out of the room (after timeout)
+  kickPlayer(roomId, playerId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+
+    let targetSocketId = null;
+    for (const [sid, p] of room.players) {
+      if (p.playerId === playerId) {
+        targetSocketId = sid;
+        break;
+      }
+    }
+
+    if (!targetSocketId) return null;
+
+    room.removePlayer(targetSocketId);
+    this.socketToRoom.delete(targetSocketId);
+
+    // If room is now empty, delete it
+    if (room.players.size === 0) {
+      this.rooms.delete(roomId);
+      console.log(`[Room] ${roomId} deleted (all players kicked)`);
+    }
+
+    return { roomId, playerId, socketId: targetSocketId };
+  }
+
+  // End the game for a room (host timed out)
+  endGame(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+
+    // Remove all players and the room
+    for (const sid of room.players.keys()) {
+      this.socketToRoom.delete(sid);
+    }
+    this.rooms.delete(roomId);
+    console.log(`[Room] ${roomId} ended (host timed out)`);
+    return { roomId };
+  }
+
+  // Rejoin the host (display) after a disconnect using the roomId
+  rejoinHost(roomId, newSocketId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return { error: 'Room not found' };
+
+    // If the host is already connected on this socket, nothing to do
+    if (room.hostSocketId === newSocketId) {
+      return { room, rejoined: false };
+    }
+
+    // Update host socket id and clear disconnect timeout
+    const oldHostSocketId = room.hostSocketId;
+    room.hostSocketId = newSocketId;
+    room.hostDisconnectedAt = null;
+
+    // Update socketToRoom mapping for the host
+    this.socketToRoom.delete(oldHostSocketId);
+    this.socketToRoom.set(newSocketId, roomId);
+
+    return { room, rejoined: true };
   }
 
   selectAvatar(socketId, avatarId) {

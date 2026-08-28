@@ -4,6 +4,9 @@ const questionLoader = require('../questions/loader');
 // Track answered players per question per room
 const answeredPlayers = new Map(); // roomId -> Set of playerIds
 
+// Store io reference for the timeout checker (set on first connection)
+let ioRef = null;
+
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -13,6 +16,7 @@ function shuffle(arr) {
 }
 
 function socketHandler(io, socket) {
+  ioRef = io;
   
   // Create room (host)
   socket.on('create-room', async (callback) => {
@@ -36,8 +40,8 @@ function socketHandler(io, socket) {
   });
 
   // Join room (player)
-  socket.on('join-room', ({ roomId, playerName }, callback) => {
-    const result = gameManager.joinRoom(roomId, socket.id, playerName);
+  socket.on('join-room', ({ roomId, playerName, playerId }, callback) => {
+    const result = gameManager.joinRoom(roomId, socket.id, playerName, playerId);
     
     if (result.error) {
       return callback({ success: false, error: result.error });
@@ -54,6 +58,81 @@ function socketHandler(io, socket) {
       success: true,
       player,
       room: room.getState()
+    });
+  });
+
+  // Rejoin room after disconnect (during active game)
+  socket.on('rejoin', ({ roomId, playerId }, callback) => {
+    const result = gameManager.rejoinPlayer(roomId, playerId, socket.id);
+    
+    if (result.error) {
+      return callback({ success: false, error: result.error });
+    }
+
+    const { room, player, rejoined } = result;
+    socket.join(roomId);
+
+    console.log(`[Room] ${roomId}: ${player.name} rejoined (${rejoined ? 'reconnected' : 'already connected'})`);
+
+    // Notify others that this player is back
+    socket.to(roomId).emit('player-rejoined', { playerId: player.id, name: player.name });
+
+    // Send current game state so the rejoined player can sync up
+    const currentQuestion = room.turn === 'PLAYER'
+      ? (room.attackQuestions && room.attackQuestions[room.attackQuestionIdx - 1])
+      : (room.defenseQuestions && room.defenseQuestions[room.defenseQuestionIdx - 1]);
+
+    callback({
+      success: true,
+      player,
+      rejoined,
+      room: room.getState(),
+      gameState: {
+        turn: room.turn,
+        round: room.round,
+        currentWave: room.currentWave,
+        monsters: room.monsters.map(m => ({ id: m.id, name: m.name, hp: m.hp, maxHp: m.maxHp, wave: m.wave, type: m.type })),
+        players: room.getPlayersArray(),
+        currentQuestion: currentQuestion ? {
+          questionIdx: room.turn === 'PLAYER' ? room.attackQuestionIdx - 1 : room.defenseQuestionIdx - 1,
+          question: {
+            text: currentQuestion.question,
+            options: currentQuestion.options,
+            time: currentQuestion.time
+          },
+          timeLimit: currentQuestion.time,
+          turn: room.turn
+        } : null
+      }
+    });
+  });
+
+  // Rejoin host (display) after disconnect
+  socket.on('rejoin-host', ({ roomId }, callback) => {
+    const result = gameManager.rejoinHost(roomId, socket.id);
+
+    if (result.error) {
+      return callback({ success: false, error: result.error });
+    }
+
+    const { room, rejoined } = result;
+    socket.join(roomId);
+
+    console.log(`[Room] ${roomId}: Host rejoined (${rejoined ? 'reconnected' : 'already connected'})`);
+
+    // Send current game state so the display can sync up
+    callback({
+      success: true,
+      rejoined,
+      room: room.getState(),
+      gameState: {
+        turn: room.turn,
+        round: room.round,
+        currentWave: room.currentWave,
+        monsters: room.monsters.map(m => ({ id: m.id, name: m.name, hp: m.hp, maxHp: m.maxHp, wave: m.wave, type: m.type })),
+        players: room.getPlayersArray(),
+        state: room.state
+      }
     });
   });
 
@@ -313,9 +392,9 @@ function socketHandler(io, socket) {
       }
     });
 
-    // Check if all alive players answered
-    const alivePlayers = room.getAlivePlayers();
-    const allAnswered = answered && alivePlayers.every(p => answered.has(p.id));
+    // Check if all alive AND connected players answered
+    const activePlayers = room.getActivePlayers();
+    const allAnswered = answered && activePlayers.every(p => answered.has(p.id));
 
     if (allAnswered) {
       setTimeout(() => {
@@ -335,6 +414,7 @@ function socketHandler(io, socket) {
         answered.delete(socket.id);
       }
       
+      // During active game, keep player in room for rejoin (mark disconnected)
       gameManager.leaveRoom(socket.id);
       
       socket.to(room.id).emit('player-left', {
@@ -502,3 +582,35 @@ function sendDefenseQuestion(io, room) {
 }
 
 module.exports = socketHandler;
+
+// ===== TIMEOUT CHECKER =====
+// Runs periodically to kick players disconnected >120s and end games when host is gone >300s
+setInterval(() => {
+  const actions = gameManager.checkTimeouts();
+  for (const action of actions) {
+    if (action.type === 'kickPlayer') {
+      const result = gameManager.kickPlayer(action.roomId, action.playerId);
+      if (result) {
+        console.log(`[Timeout] Kicked player ${action.playerId} from room ${action.roomId} (disconnected >120s)`);
+        // Notify remaining players that this player was removed
+        const room = gameManager.getRoom(action.roomId);
+        if (room && ioRef) {
+          ioRef.to(action.roomId).emit('player-left', { playerId: result.socketId, reason: 'timeout' });
+        }
+      }
+    } else if (action.type === 'endGame') {
+      const result = gameManager.endGame(action.roomId);
+      if (result) {
+        console.log(`[Timeout] Ended game in room ${action.roomId} (host disconnected >300s)`);
+        if (ioRef) {
+          ioRef.to(action.roomId).emit('game-over', {
+            players: [],
+            winner: null,
+            reason: 'Host disconnected'
+          });
+        }
+        answeredPlayers.delete(action.roomId);
+      }
+    }
+  }
+}, 5000);

@@ -275,6 +275,61 @@
     let currentMonsters = [];
     let currentWave = 1;
 
+    // ===== HOST RECONNECTION =====
+    // Store roomId so the display (host) can rejoin after a disconnect
+    function saveHostRoom(rid) {
+      roomId = rid;
+      try { localStorage.setItem('dq_hostRoomId', rid); } catch (e) {}
+    }
+    function loadHostRoom() {
+      try { return localStorage.getItem('dq_hostRoomId'); } catch (e) { return null; }
+    }
+    function clearHostRoom() {
+      try { localStorage.removeItem('dq_hostRoomId'); } catch (e) {}
+    }
+
+    // When socket reconnects, try to rejoin as host
+    socket.on('connect', () => {
+      const savedRoom = loadHostRoom();
+      if (savedRoom && isHost) {
+        socket.emit('rejoin-host', { roomId: savedRoom }, (res) => {
+          if (res && res.success) {
+            roomId = savedRoom;
+            console.log('[Host Rejoin] Successfully rejoined as host');
+            // Sync game state
+            if (res.gameState) {
+              const gs = res.gameState;
+              currentWave = gs.currentWave;
+              currentMonsters = gs.monsters || [];
+              players = gs.players || [];
+              if (gs.state === 'PLAYING') {
+                // Restore game screen state
+                $('create-btn').style.display = 'none';
+                $('start-btn').style.display = 'none';
+                $('qr-section').style.display = 'none';
+                $('lobby-screen').style.display = 'none';
+                $('game-screen').style.display = 'block';
+                initCanvas();
+                generateStaticObjects(currentWave);
+                refreshPlayerHP();
+                updateMonsterHP();
+                buildEntities();
+              } else {
+                // Back to lobby
+                $('create-btn').style.display = 'none';
+                $('start-btn').style.display = 'block';
+                $('qr-section').style.display = 'flex';
+                refreshLobby();
+              }
+            }
+          } else {
+            console.log('[Host Rejoin] Failed:', res && res.error);
+            clearHostRoom();
+          }
+        });
+      }
+    });
+
     // DOM
     const $ = id => document.getElementById(id);
 
@@ -290,7 +345,7 @@
     $('create-btn').addEventListener('click', () => {
       socket.emit('create-room', (res) => {
         if (res.success) {
-          roomId = res.room.id;
+          saveHostRoom(res.room.id);
           isHost = true;
           $('qr-code').innerHTML = `<img src="${res.room.qrImage}" alt="QR">`;
           $('room-code').textContent = roomId;
@@ -433,6 +488,7 @@
 
     // ==================== GAME OVER ====================
     socket.on('game-over', ({ players: fp, winner }) => {
+      clearHostRoom();
       $('q-overlay').style.display = 'none';
       showLeaderboard(fp, winner);
       playSound('fanfare');

@@ -260,6 +260,91 @@
     let currentTurn = 'PLAYER';
     let currentQuestionIdx = 0;
     let timerInterval = null;
+    let myRoomId = null;
+    let myPlayerId = null;
+
+    // ===== RECONNECTION =====
+    // Store stable identity so we can rejoin after a disconnect (e.g. switching apps)
+    function saveIdentity(roomId, playerId) {
+      myRoomId = roomId;
+      myPlayerId = playerId;
+      try {
+        localStorage.setItem('dq_roomId', roomId);
+        localStorage.setItem('dq_playerId', playerId);
+      } catch (e) {}
+    }
+
+    function loadIdentity() {
+      try {
+        return {
+          roomId: localStorage.getItem('dq_roomId'),
+          playerId: localStorage.getItem('dq_playerId')
+        };
+      } catch (e) { return { roomId: null, playerId: null }; }
+    }
+
+    function clearIdentity() {
+      myRoomId = null;
+      myPlayerId = null;
+      try {
+        localStorage.removeItem('dq_roomId');
+        localStorage.removeItem('dq_playerId');
+      } catch (e) {}
+    }
+
+    // When socket reconnects (new connection), try to rejoin the active game
+    socket.on('connect', () => {
+      const { roomId, playerId } = loadIdentity();
+      if (roomId && playerId && myPlayer && myPlayer.alive !== false) {
+        socket.emit('rejoin', { roomId, playerId }, (res) => {
+          if (res && res.success) {
+            myPlayer = res.player;
+            myRoomId = roomId;
+            myPlayerId = playerId;
+            if (res.player.avatar) {
+              startMainIdleAnim(res.player.avatar);
+              drawPlayerFrame(document.getElementById('my-avatar-canvas').getContext('2d'), res.player.avatar, 'idle', 0, 48);
+            }
+            els.myName.textContent = res.player.name;
+            updateStatsUI();
+            showScreen('game');
+            console.log('[Rejoin] Successfully rejoined game');
+
+            // Sync current game state (question, turn, round, wave)
+            if (res.gameState) {
+              const gs = res.gameState;
+              currentTurn = gs.turn;
+              els.roundDisplay.textContent = gs.round;
+              if (gs.currentQuestion) {
+                const q = gs.currentQuestion;
+                currentQuestionIdx = q.questionIdx;
+                els.questionText.textContent = q.question.text;
+                if (q.turn === 'PLAYER') {
+                  els.turnIndicator.className = 'turn-indicator player';
+                  els.turnIndicator.innerHTML = '⚔️ PLAYER TURN - Attack!';
+                  els.questionMeta.className = 'question-meta attack';
+                  els.questionMeta.textContent = `⚔️ Wave ${gs.currentWave}`;
+                } else {
+                  els.turnIndicator.className = 'turn-indicator monster';
+                  els.turnIndicator.innerHTML = '🛡️ MONSTER TURN!';
+                  els.questionMeta.className = 'question-meta defense';
+                  els.questionMeta.textContent = `🛡️ Defend! Dodge: ${myPlayer ? myPlayer.dodge : 0}%`;
+                }
+                els.options.innerHTML = q.question.options.map((opt, idx) => `
+                  <button class="option-btn" data-idx="${idx}">${opt}</button>
+                `).join('');
+                document.querySelectorAll('.option-btn').forEach(btn => {
+                  btn.addEventListener('click', () => submitAnswer(parseInt(btn.dataset.idx)));
+                });
+                startTimer(q.timeLimit);
+              }
+            }
+          } else {
+            console.log('[Rejoin] Failed:', res && res.error);
+          }
+        });
+      }
+    });
 
     // ===== SPRITE SYSTEM =====
     const SPRITE_BASE = '/display/sprites/';
@@ -468,8 +553,15 @@
       if (!playerName) { els.joinError.textContent = 'Please enter your name'; els.joinError.style.display = 'block'; return; }
       els.joinBtn.disabled = true;
       els.joinError.style.display = 'none';
-      socket.emit('join-room', { roomId, playerName }, (res) => {
-        if (res.success) { myPlayer = res.player; loadAvatars(); showScreen('avatar'); }
+      // Reuse existing playerId if present (so a rejoin keeps identity), else create new
+      const { playerId } = loadIdentity();
+      const newPlayerId = playerId || 'p_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+      socket.emit('join-room', { roomId, playerName, playerId: newPlayerId }, (res) => {
+        if (res.success) {
+          myPlayer = res.player;
+          saveIdentity(roomId, newPlayerId);
+          loadAvatars(); showScreen('avatar');
+        }
         else { els.joinError.textContent = res.error; els.joinError.style.display = 'block'; els.joinBtn.disabled = false; }
       });
     });
@@ -668,6 +760,7 @@
     // Game Over
     socket.on('game-over', ({ players, winner, reason }) => {
       clearInterval(timerInterval);
+      clearIdentity();
       const sorted = [...players].sort((a, b) => b.score - a.score);
       const me = players.find(p => p.id === socket.id);
       const rank = sorted.findIndex(p => p.id === socket.id) + 1;
